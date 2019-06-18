@@ -97,7 +97,7 @@ if not os.path.isdir(MODEL_SAVE_PATH):
     os.makedirs(MODEL_SAVE_PATH)
 
 for i in range(50):
-    print('{}: {}'.format(i, model.compute_log_likelihood())
+    print('{}: {}'.format(i, model.compute_log_likelihood()))
     opt = gpflow.training.ScipyOptimizer()
     opt.minimize(model, maxiter=1000)
 
