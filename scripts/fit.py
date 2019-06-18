@@ -103,5 +103,4 @@ opt = gpflow.training.ScipyOptimizer()
 for i in range(30):
     print('{}: {}'.format(i, model.compute_log_likelihood()))
     opt.minimize(model, maxiter=1000)
-
-    pickle.dump(model.read_values(), open(path_to_save+'{}_model'.format(gene), 'wb'))
+    pickle.dump(model.read_values(), open(path_to_save, 'wb'))
