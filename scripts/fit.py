@@ -13,10 +13,10 @@ import gpflow.multioutput.kernels as mk
 import pickle
 
 
-GENE_PATH = '/work-zfs/abattle4/karl/GTEx_gene/'
-CORRELATION_PATH = '/work-zfs/abattle4/karl/correlation_matrices/'
+GENE_PATH = '~/GTEx_gene/'
+CORRELATION_PATH = '~/correlation_matrices/'
 
-MODEL_SAVE_PATH = 'work-zfs/abattle4/karl/model_dict_saves/'
+MODEL_SAVE_PATH = '~/model_dict_saves/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = sys.argv[1]
