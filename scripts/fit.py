@@ -98,7 +98,7 @@ if not os.path.isdir(MODEL_SAVE_PATH):
     os.makedirs(MODEL_SAVE_PATH)
 
 path_to_save = MODEL_SAVE_PATH + '{}_param_dict'.format(gene)
-opt = gpflow.training.ScipyOptimizer()
+opt = gpflow.train.AdamOptimizer(0.01)
 
 for i in range(30):
     print('{}: {}'.format(i, model.compute_log_likelihood()))
