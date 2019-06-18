@@ -15,7 +15,6 @@ import pickle
 
 GENE_PATH = './GTEx_gene/'
 CORRELATION_PATH = './correlation_matrices/'
-
 MODEL_SAVE_PATH = './model_dicts/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
@@ -84,19 +83,16 @@ with gpflow.defer_build():
     kernel.W.transform = gpflow.transforms.Log1pe()
     kernel.W.prior = gpflow.priors.Laplace(0, 0.5)
 
-    # initialise mean of variational posterior to be of shape MxL
     q_mu = q_mu_init
-    # initialise \sqrt(Σ) of variational posterior to be of shape LxMxM
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
     
     likelihood = gpflow.likelihoods.Gaussian()
-    model = gpflow.models.SVGP(Xtrunc, Y, kernel, likelihood, feat=feature, q_mu=q_mu, q_sqrt=q_sqrt, minibatch_size=minibatch_size)
+    m = gpflow.models.SVGP(Xtrunc, Y, kernel, likelihood, feat=feature, q_mu=q_mu, q_sqrt=q_sqrt, minibatch_size=minibatch_size)
         
-model.compile()
+m.compile()
 
 if not os.path.isdir(MODEL_SAVE_PATH):
     os.makedirs(MODEL_SAVE_PATH)
-
 
 import gpflow.training.monitor as mon
 
@@ -147,7 +143,7 @@ monitor = mon.Monitor(monitor_tasks, session, global_step)
 optimiser = gpflow.train.AdamOptimizer(0.01)
 
 with mon.Monitor(monitor_tasks, session, global_step, print_summary=True) as monitor:
-    optimiser.minimize(m, step_callback=monitor, maxiter=20000, global_step=global_step)
+    optimiser.minimize(m, step_callback=monitor, maxiter=10000, global_step=global_step)
 
 file_writer.close()
 
