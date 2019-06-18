@@ -1,6 +1,6 @@
 #!/bin/bash
 #SBATCH -p unlimited
-#SBATCH -t 1:0:0
+#SBATCH -t 2:0:0
 
 module load singularity
 
