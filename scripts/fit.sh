@@ -8,6 +8,6 @@ module load singularity
 
 GENE=$(ls /work-zfs/abattle4/karl/correlation_matrices/ | awk -v var=$SLURM_ARRAY_TASK_ID 'NR==var')
 
-cd /working/abattle4/karl/
+cd /work-zfs/abattle4/karl/
 export SINGULARITY_HOME=$PWD:/home/$USER
 singularity exec shub://karltayeb/gp_fine_mapping python gp_fine_mapping/scripts/fit.py $GENE
