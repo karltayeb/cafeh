@@ -16,7 +16,7 @@ import pickle
 GENE_PATH = './GTEx_gene/'
 CORRELATION_PATH = './correlation_matrices/'
 
-MODEL_SAVE_PATH = './model_dict_saves/'
+MODEL_SAVE_PATH = './model_dicts/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = sys.argv[1]
@@ -58,6 +58,7 @@ X = u * np.sqrt(s)
 # set up inputs/outputs to model, parmaeter initializations
 K = 5
 D = 1000
+minibatch_size = 50
 
 Xtrunc = X[:, :D]
 Y = beta_df[in_range].values
@@ -89,16 +90,18 @@ with gpflow.defer_build():
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
     
     likelihood = gpflow.likelihoods.Gaussian()
-    model = gpflow.models.SVGP(Xtrunc, Y, kernel, likelihood, feat=feature, q_mu=q_mu, q_sqrt=q_sqrt)
+    model = gpflow.models.SVGP(Xtrunc, Y, kernel, likelihood, feat=feature, q_mu=q_mu, q_sqrt=q_sqrt, minibatch_size=minibatch_size)
         
 model.compile()
 
 if not os.path.isdir(MODEL_SAVE_PATH):
     os.makedirs(MODEL_SAVE_PATH)
 
-for i in range(50):
+path_to_save = MODEL_SAVE_PATH + '{}_param_dict'.format(gene)
+opt = gpflow.training.ScipyOptimizer()
+
+for i in range(30):
     print('{}: {}'.format(i, model.compute_log_likelihood()))
-    opt = gpflow.training.ScipyOptimizer()
     opt.minimize(model, maxiter=1000)
 
-    pickle.dump(model.read_values(), open(MODEL_SAVE_PATH+'{}_model'.format(gene), 'wb'))
+    pickle.dump(model.read_values(), open(path_to_save+'{}_model'.format(gene), 'wb'))
