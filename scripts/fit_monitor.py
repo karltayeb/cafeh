@@ -15,7 +15,7 @@ import pickle
 
 GENE_PATH = './GTEx_gene/'
 CORRELATION_PATH = './correlation_matrices/'
-MODEL_SAVE_PATH = './model_dicts/'
+MODEL_SAVE_PATH = './model-dicts/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = sys.argv[1]
@@ -113,13 +113,13 @@ session = m.enquire_session()
 global_step = mon.create_global_step(session)
 
 print_task = mon.PrintTimingsTask().with_name('print')\
-    .with_condition(mon.PeriodicIterationCondition(10))\
+    .with_condition(mon.PeriodicIterationCondition(100))\
     .with_exit_condition(True)
 
 sleep_task = mon.SleepTask(0.01).with_name('sleep').with_name('sleep')
 
 saver_task = mon.CheckpointTask('./monitor-saves/{}/'.format(run)).with_name('saver')\
-    .with_condition(mon.PeriodicIterationCondition(10))\
+    .with_condition(mon.PeriodicIterationCondition(200))\
     .with_exit_condition(True)
 
 file_writer = mon.LogdirWriter('./model-tensorboard/{}/'.format(run))
@@ -134,7 +134,7 @@ lml_tboard_task = mon.LmlToTensorBoardTask(file_writer, m).with_name('lml_tboard
 
 path_to_save = MODEL_SAVE_PATH + '{}_param_dict'.format(gene)
 savemodeldict = SaveModelDict(file_writer, path_to_save, m).with_name('save_model_dict')\
-    .with_condition(mon.PeriodicIterationCondition(500))\
+    .with_condition(mon.PeriodicIterationCondition(200))\
     .with_exit_condition(True)
 
 monitor_tasks = [print_task, model_tboard_task, lml_tboard_task, saver_task, savemodeldict, sleep_task]
