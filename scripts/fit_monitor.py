@@ -81,7 +81,7 @@ with gpflow.defer_build():
     kern_list = [gpflow.kernels.RBF(Xtrunc.shape[1]) for _ in range(K)]
     kernel = mk.SeparateMixedMok(kern_list, W=session.run(tf.nn.sigmoid(W)))
     kernel.W.transform = gpflow.transforms.Log1pe()
-    kernel.W.prior = gpflow.priors.Laplace(0, 0.5)
+    kernel.W.prior = gpflow.priors.Exponential(2.0)
 
     q_mu = q_mu_init
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
