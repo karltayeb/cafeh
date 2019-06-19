@@ -41,9 +41,9 @@ def function_means(model, X, full_cov=False):
         
     return mu.T, var.T
 
-GENE_PATH = './top_genes/'
-CORRELATION_PATH = './data/correlations/'
-FIGURE_SAVE_PATH = './figs/'
+GENE_PATH = '/work-zfs/abattle4/karl/GTEx_gene/' 
+CORRELATION_PATH = '/work-zfs/abattle4/karl/correlation_matrices/'
+FIGURE_SAVE_PATH = '/work-zfs/abattle4/karl/figs/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = sys.argv[1]
@@ -111,9 +111,7 @@ with gpflow.defer_build():
     kernel.W.transform = gpflow.transforms.Log1pe()
     kernel.W.prior = gpflow.priors.Exponential(3.0)
 
-    # initialise mean of variational posterior to be of shape MxL
     q_mu = q_mu_init
-    # initialise \sqrt(Σ) of variational posterior to be of shape LxMxM
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
 
     likelihood = gpflow.likelihoods.Gaussian()

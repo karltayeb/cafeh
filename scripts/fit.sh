@@ -1,6 +1,8 @@
 #!/bin/bash
-#SBATCH -p unlimited
-#SBATCH -t 2:0:0
+#SBATCH -n 2
+#SBATCH --mem-per-cpu 4gb
+#SBATCH -p shared
+#SBATCH -t 8:0:0
 
 module load singularity
 
@@ -10,4 +12,5 @@ GENE=$(ls /work-zfs/abattle4/karl/correlation_matrices/ | awk -v var=$SLURM_ARRA
 
 cd /work-zfs/abattle4/karl/
 export SINGULARITY_HOME=$PWD:/home/$USER
-singularity exec shub://karltayeb/gp_fine_mapping python gp_fine_mapping/scripts/fit.py $GENE
+IMAGE=karltayeb-gp_fine_mapping-master-cpu.simg
+singularity exec $IMAGE python gp_fine_mapping/scripts/fit_monitor.py $GENE

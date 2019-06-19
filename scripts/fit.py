@@ -12,7 +12,7 @@ import gpflow.multioutput.kernels as mk
 
 import pickle
 
-
+tf.logging.set_verbosity(tf.logging.ERROR)
 GENE_PATH = './GTEx_gene/'
 CORRELATION_PATH = './correlation_matrices/'
 
@@ -100,6 +100,11 @@ if not os.path.isdir(MODEL_SAVE_PATH):
 path_to_save = MODEL_SAVE_PATH + '{}_param_dict'.format(gene)
 opt = gpflow.train.AdamOptimizer(0.01)
 
+if os.path.exists(path_to_save):
+    param_dict = pickle.load(open('./model_dicts/{}_param_dict'.format(gene), 'rb'))
+    model.assign(param_dict)
+
+print('Fitting GP for {}'.format(gene))
 for i in range(30):
     print('{}: {}'.format(i, model.compute_log_likelihood()))
     opt.minimize(model, maxiter=1000)
