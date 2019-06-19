@@ -8,6 +8,7 @@ From: tensorflow/tensorflow:latest-py3-jupyter
 
 %setup
   # runs on host - the path to the image is $SINGULARITY_ROOTFS
+  apt-get install python3-tk
 
 %post
   # post-setup script
@@ -35,6 +36,8 @@ From: tensorflow/tensorflow:latest-py3-jupyter
   pip install cryptography
   
   pip install gpflow
+  pip install matplotlib
+  pip install seaborn
 
 %runscript
   # executes with the singularity run command
