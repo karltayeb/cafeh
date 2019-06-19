@@ -143,8 +143,11 @@ monitor = mon.Monitor(monitor_tasks, session, global_step)
 optimiser = gpflow.train.AdamOptimizer(0.01)
 
 with mon.Monitor(monitor_tasks, session, global_step, print_summary=True) as monitor:
-    optimiser.minimize(m, step_callback=monitor, maxiter=10000, global_step=global_step)
+    optimiser.minimize(m, step_callback=monitor, maxiter=20000, global_step=global_step)
 
 file_writer.close()
 
+m.anchor(session)
+with open(path_to_save, 'wb') as f:
+    pickle.dump(m.read_values(), f)
 
