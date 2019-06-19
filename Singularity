@@ -8,9 +8,10 @@ From: tensorflow/tensorflow:latest-py3-jupyter
 
 %setup
   # runs on host - the path to the image is $SINGULARITY_ROOTFS
-  apt-get install python3-tk
 
 %post
+  apt-get -y install python3-tk
+  
   # post-setup script
 
   # load environment variables
@@ -36,6 +37,7 @@ From: tensorflow/tensorflow:latest-py3-jupyter
   pip install cryptography
   
   pip install gpflow
+  pip install tensorflow-probability
   pip install matplotlib
   pip install seaborn
 
