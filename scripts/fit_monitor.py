@@ -81,7 +81,7 @@ with gpflow.defer_build():
     kern_list = [gpflow.kernels.RBF(Xtrunc.shape[1]) for _ in range(K)]
     kernel = mk.SeparateMixedMok(kern_list, W=session.run(tf.nn.sigmoid(W)))
     kernel.W.transform = gpflow.transforms.Log1pe()
-    kernel.W.prior = gpflow.priors.Laplace(0, 0.5)
+    kernel.W.prior = gpflow.priors.Exponential(2.0)
 
     q_mu = q_mu_init
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
@@ -143,8 +143,11 @@ monitor = mon.Monitor(monitor_tasks, session, global_step)
 optimiser = gpflow.train.AdamOptimizer(0.01)
 
 with mon.Monitor(monitor_tasks, session, global_step, print_summary=True) as monitor:
-    optimiser.minimize(m, step_callback=monitor, maxiter=10000, global_step=global_step)
+    optimiser.minimize(m, step_callback=monitor, maxiter=20000, global_step=global_step)
 
 file_writer.close()
 
+m.anchor(session)
+with open(path_to_save, 'wb') as f:
+    pickle.dump(m.read_values(), f)
 

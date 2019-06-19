@@ -27,6 +27,8 @@ From: tensorflow/tensorflow:latest-gpu-py3-jupyter
   # additional packages
   apt-get update
   apt-get install -y python-tk
+  apt-get install -y python3-tk
+
   apt-get install -y libsm6 libxext6
   pip install selenium
   pip install moviepy
@@ -35,7 +37,10 @@ From: tensorflow/tensorflow:latest-gpu-py3-jupyter
   pip install cryptography
   
   pip install gpflow
-
+  pip install tensorflow-probability
+  pip install matplotlib
+  pip install seaborn
+  
 %runscript
   # executes with the singularity run command
   # delete this section to use existing docker ENTRYPOINT command
