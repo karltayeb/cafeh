@@ -4,7 +4,7 @@ import seaborn as sns
 import pandas as pd
 import numpy as np
 import tensorflow as tf
-import os
+import os, sys
 
 
 import gpflow
@@ -46,7 +46,7 @@ CORRELATION_PATH = './data/correlations/'
 FIGURE_SAVE_PATH = './figs/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
-gene = 'ENSG00000008283.15'
+gene = sys.argv[1]
 
 gene_df = pd.read_csv(GENE_PATH + '{}'.format(gene), sep='\t', names=names)
 r_df = pd.read_csv(CORRELATION_PATH + '{}'.format(gene), index_col=0)
