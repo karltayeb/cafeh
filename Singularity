@@ -9,9 +9,7 @@ From: tensorflow/tensorflow:latest-py3-jupyter
 %setup
   # runs on host - the path to the image is $SINGULARITY_ROOTFS
 
-%post
-  apt-get -y install python3-tk
-  
+%post  
   # post-setup script
 
   # load environment variables
@@ -30,6 +28,8 @@ From: tensorflow/tensorflow:latest-py3-jupyter
   apt-get update
   apt-get install -y python-tk
   apt-get install -y libsm6 libxext6
+  apt-get -y install python3-tk
+
   pip install selenium
   pip install moviepy
   pip install lmdb
