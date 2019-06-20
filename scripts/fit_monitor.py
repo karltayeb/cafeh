@@ -19,6 +19,24 @@ MODEL_SAVE_PATH = './model-dicts/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = sys.argv[1]
+run_id = 'lambda-20'
+run = gene
+
+MODEL_SAVE_PATH = MODEL_SAVE_PATH + run_id + '/'
+if not os.path.isdir(MODEL_SAVE_PATH):
+    print('Making directory {}'.format(MODEL_SAVE_PATH))
+    os.makedirs(MODEL_SAVE_PATH)
+
+MONITOR_SAVE_PATH = './monitor-saves/{}/{}/'.format(run_id, run)
+if not os.path.isdir(MONITOR_SAVE_PATH):
+    print('Making directory {}'.format(MONITOR_SAVE_PATH))
+    os.makedirs(MONITOR_SAVE_PATH)
+
+TBOARD_SAVE_PATH = './model-tensorboard/{}/{}/'.format(run_id, run)
+if not os.path.isdir(MONITOR_SAVE_PATH):
+    print('Making directory {}'.format(TBOARD_SAVE_PATH))
+    os.makedirs(TBOARD_SAVE_PATH)
+
 
 gene_df = pd.read_csv(GENE_PATH + '{}'.format(gene), sep='\t', names=names)
 r_df = pd.read_csv(CORRELATION_PATH + '{}'.format(gene), index_col=0)
@@ -81,7 +99,7 @@ with gpflow.defer_build():
     kern_list = [gpflow.kernels.RBF(Xtrunc.shape[1]) for _ in range(K)]
     kernel = mk.SeparateMixedMok(kern_list, W=session.run(tf.nn.sigmoid(W)))
     kernel.W.transform = gpflow.transforms.Log1pe()
-    kernel.W.prior = gpflow.priors.Exponential(2.0)
+    kernel.W.prior = gpflow.priors.Exponential(20.0)
 
     q_mu = q_mu_init
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
@@ -90,9 +108,6 @@ with gpflow.defer_build():
     m = gpflow.models.SVGP(Xtrunc, Y, kernel, likelihood, feat=feature, q_mu=q_mu, q_sqrt=q_sqrt, minibatch_size=minibatch_size)
         
 m.compile()
-
-if not os.path.isdir(MODEL_SAVE_PATH):
-    os.makedirs(MODEL_SAVE_PATH)
 
 import gpflow.training.monitor as mon
 
@@ -107,8 +122,6 @@ class SaveModelDict(mon.BaseTensorBoardTask):
 
 import gpflow.training.monitor as mon
 
-run = gene
-
 session = m.enquire_session()
 global_step = mon.create_global_step(session)
 
@@ -118,11 +131,11 @@ print_task = mon.PrintTimingsTask().with_name('print')\
 
 sleep_task = mon.SleepTask(0.01).with_name('sleep').with_name('sleep')
 
-saver_task = mon.CheckpointTask('./monitor-saves/{}/'.format(run)).with_name('saver')\
+saver_task = mon.CheckpointTask('./monitor-saves/{}/{}/'.format(run_id, run)).with_name('saver')\
     .with_condition(mon.PeriodicIterationCondition(200))\
     .with_exit_condition(True)
 
-file_writer = mon.LogdirWriter('./model-tensorboard/{}/'.format(run))
+file_writer = mon.LogdirWriter('./model-tensorboard/{}/{}/'.format(run_id, run))
 
 model_tboard_task = mon.ModelToTensorBoardTask(file_writer, m).with_name('model_tboard')\
     .with_condition(mon.PeriodicIterationCondition(10))\
