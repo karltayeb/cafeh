@@ -180,6 +180,8 @@ with gpflow.defer_build():
     
     likelihood = WeightedGaussian()
     m = gpflow.models.SVGP(Xtrunc, Y, kernel, likelihood, feat=feature, q_mu=q_mu, q_sqrt=q_sqrt, num_latent=tissues.size, minibatch_size=50)
+    m.q_mu.transform = gpflow.transform.Lop1pe()
+    m.q_mu = np.clip(q_mu_init, 1e-8, None)
     
 m.compile()
 
