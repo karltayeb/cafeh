@@ -48,6 +48,7 @@ def generate_plots(path, name):
     # List dirs in model-dicts
     # For each file model-dicts/path/to/dict save plots to figs/path/to/dict
     param_path = os.path.join(path, name)
+    print(param_path)
 
     gene_path = '/work-zfs/abattle4/karl/GTEx_gene/'
     print(gene_path)
@@ -136,7 +137,7 @@ def generate_plots(path, name):
     model.compile()
 
     # load parameters
-    param_dict = pickle.load(open('./model-dicts/{}_param_dict'.format(gene), 'rb'))
+    param_dict = pickle.load(open(param_path, 'rb'))
     model.assign(param_dict)
 
     # make prediction
