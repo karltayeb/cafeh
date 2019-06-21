@@ -258,9 +258,11 @@ def generate_plots(path, name):
 
 subdir = sys.argv[1]
 path_to_model_dicts = '/work-zfs/abattle4/karl/model-dicts/'
+i = 0
 for path, subdirs, files in os.walk(path_to_model_dicts):
     for name in files:
-        if subdir in path:
+        if int(subdir) == i:
             generate_plots(path, name)
+        i += 1
 
 
