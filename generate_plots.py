@@ -188,7 +188,7 @@ def generate_plots(path, name):
     ##########
     # PLOT 3 #
     ##########
-    print(ave_path + '/prediction_scatterplot.png')            
+    print(save_path + '/prediction_scatterplot.png')            
     fig, axs = plt.subplots(7, 7, figsize=(40, 30), sharex=True, sharey=True)
     for i, ax in enumerate(axs.reshape(-1)): 
         tissue = tissues[i]
