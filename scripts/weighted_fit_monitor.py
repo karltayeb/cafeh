@@ -20,14 +20,8 @@ import pickle
 
 
 GENE_PATH = './GTEx_gene/'
-GENE_PATH = '/Users/karltayeb/Research/gp_fine_mapping/data/GTEx_top_egenes/'
-
 CORRELATION_PATH = './correlation_matrices/'
-CORRELATION_PATH = '/Users/karltayeb/Research/gp_fine_mapping/data/correlations/'
-
 MODEL_SAVE_PATH = './model-dicts/'
-MODEL_SAVE_PATH = '/Users/karltayeb/Research/gp_fine_mapping/model-dicts/'
-
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = sys.argv[1]

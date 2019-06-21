@@ -19,7 +19,7 @@ MODEL_SAVE_PATH = './model-dicts/'
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = sys.argv[1]
-run_id = 'lambda-20'
+run_id = 'lambda-100'
 run = gene
 
 MODEL_SAVE_PATH = MODEL_SAVE_PATH + run_id + '/'
@@ -99,7 +99,7 @@ with gpflow.defer_build():
     kern_list = [gpflow.kernels.RBF(Xtrunc.shape[1]) for _ in range(K)]
     kernel = mk.SeparateMixedMok(kern_list, W=session.run(tf.nn.sigmoid(W)))
     kernel.W.transform = gpflow.transforms.Log1pe()
-    kernel.W.prior = gpflow.priors.Exponential(20.0)
+    kernel.W.prior = gpflow.priors.Exponential(100.0)
 
     q_mu = q_mu_init
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
