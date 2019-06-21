@@ -27,7 +27,7 @@ names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf'
 gene = sys.argv[1]
 rate = float(sys.argv[2])
 
-run_id = 'weighted/lambda-{}'.format(rate)
+run_id = 'positive_weighted/lambda-{}'.format(rate)
 run = gene
 
 MODEL_SAVE_PATH = MODEL_SAVE_PATH + run_id + '/'
