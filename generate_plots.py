@@ -141,19 +141,27 @@ def generate_plots(path, name):
 
     # make prediction
     mu, var = model.predict_f(Xtrunc)
+    gmu, gvar = function_means(model, Xtrunc)
 
-    print('Generating plot 1: {}/W_heatmap.png'.format(save_path))            
-    # PLOT 1
-    #heatmap of W
+
+    ##########
+    # PLOT 1 #
+    ##########
+    print(save_path + '/W_heatmap.png')            
     fig, ax = plt.subplots(1, 2, figsize=(10, 4))
     sns.heatmap(model.kern.W.value, ax=ax[0])
     ax[1].hist(model.kern.W.value)
     plt.legend()
+    plt.suptitle(gene)
     plt.savefig(save_path + '/W_heatmap.png')
     plt.close()
 
-    print('Generating plot 2')            
-    # PLOT 2
+
+
+    ##########
+    # PLOT 2 # 
+    ##########
+    print(save_path + '/component_scatterplot.png')            
     # plot decomposed components against betas
     fig, axs = plt.subplots(7, 7, figsize=(40, 30), sharex=True, sharey=True)
     for i, ax in enumerate(axs.reshape(-1)): 
@@ -167,7 +175,7 @@ def generate_plots(path, name):
             ax.scatter(positions, betas, marker='x', c='k', alpha=0.2)
             for k in range(K):
                 w = model.kern.W.value[i, k]
-                ax.scatter(positions, w * mu[:, k], label=str(k))
+                ax.scatter(positions, w * gmu[:, k], label=str(k))
 
     plt.suptitle(gene)
     plt.legend()
@@ -175,23 +183,57 @@ def generate_plots(path, name):
     plt.savefig(save_path + '/component_scatterplot.png')
     plt.close()
 
-    print('Generating plot 3')            
+
+
+    ##########
+    # PLOT 3 #
+    ##########
+    print(ave_path + '/prediction_scatterplot.png')            
+    fig, axs = plt.subplots(7, 7, figsize=(40, 30), sharex=True, sharey=True)
+    for i, ax in enumerate(axs.reshape(-1)): 
+        tissue = tissues[i]
+        ax.set_title(tissue)
+
+        if np.isin(tissue, beta_df.columns):
+            positions = pos[in_range]
+            betas = np.abs(beta_df.loc[:, tissue])[in_range]
+            pvals = pval_df.loc[:, tissue][in_range]        
+            ax.scatter(positions, betas, marker='x', c='k', alpha=0.2)
+            ax.scatter(positions, mu[:, i], c=pvals)
+
+    plt.suptitle(gene)
+    plt.legend()
+    plt.tight_layout()
+    plt.savefig(save_path + '/prediction_scatterplot.png')
+    plt.close()
+
+
+
+    ##########
+    # PLOT 4 #
+    ##########
+    print(save_path + '/component_leads.png')            
     # PLOT 3
     # plot each component predictions, colored by r^2 with largest prediction
     fig, ax = plt.subplots(1, 5, figsize=(20, 5), sharey=True)
     for k in range(K):
-        lead = mu[:, k].argmax()
+        lead = gmu[:, k].argmax()
         color = r2_in_range[lead]
-        ax[k].scatter(positions, mu[:, k], c=color)
+        ax[k].scatter(positions, gmu[:, k], c=color)
         ax[k].axvline(positions[lead])
         ax[k].set_title(r_df.index.values[lead])
         
+    plt.suptitle(gene)
+    plt.tight_layout()
     plt.savefig(save_path + '/component_leads.png')
     plt.close()
 
-    print('Generating plot 4')            
-    # PLOT 4
-    # plot betas against predictions, colored by pvalues
+
+
+    ##########
+    # PLOT 5 #
+    ##########
+    print(save_path + '/prediction_accuracy_by_pval.png')            
     fig, axs = plt.subplots(7, 7, figsize=(40, 30), sharex=True, sharey=True)
     for i, ax in enumerate(axs.reshape(-1)): 
         tissue = tissues[i]
@@ -206,15 +248,16 @@ def generate_plots(path, name):
             im = ax.scatter(mu[:, i], betas, c=pvals)
             fig.colorbar(im, ax=ax)
             
-            d=1
-            
     plt.suptitle(gene)
     plt.tight_layout()
     plt.savefig(save_path + '/prediction_accuracy_by_pval.png')
     plt.close()
 
+
+
 subdir = sys.argv[1]
-for path, subdirs, files in os.walk('/work-zfs/abattle4/karl/model-dicts/'):
+path_to_model_dicts = '/work-zfs/abattle4/karl/model-dicts/'
+for path, subdirs, files in os.walk(path_to_model_dicts):
     for name in files:
         if subdir in path:
             generate_plots(path, name)
