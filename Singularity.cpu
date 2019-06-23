@@ -39,6 +39,7 @@ From: tensorflow/tensorflow:latest-py3-jupyter
   pip install gpflow
   pip install tensorflow-probability
   pip install matplotlib
+  pip install sklearn
   pip install seaborn
 
 %runscript
