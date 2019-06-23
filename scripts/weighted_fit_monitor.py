@@ -17,6 +17,7 @@ from gpflow import transforms, settings, logdensities
 import gpflow.training.monitor as mon
 
 import pickle
+from sklearn import cluster
 
 
 GENE_PATH = './GTEx_gene/'
@@ -96,6 +97,7 @@ class SaveModelDict(mon.BaseTensorBoardTask):
         pickle.dump(self.model.read_values(), open(self.file_path, 'wb'))
 
 
+# load data
 gene_df = pd.read_csv(GENE_PATH + '{}'.format(gene), sep='\t', names=names)
 r_df = pd.read_csv(CORRELATION_PATH + '{}'.format(gene), index_col=0)
 
@@ -153,12 +155,8 @@ Y[:, 1::2] = variances
 
 # initialize variational parameters
 Z = Xtrunc.copy()[::10]
-W = np.random.normal(size=(49, K))
-q_mu_init = np.stack([
-    Y.mean(1)[::10] + np.random.normal(size=Y[::10].shape[0]) * 0.1
-    for _ in range(K)]).T
-q_mu_init = np.log(np.clip(q_mu_init, Y.mean().min(), None))
-
+q_mu_init, assignments = cluster.k_means(betas.T[:, ::10], n_clusters=K)[:2]
+W = np.random.random(size=(tissues.size, K))
 
 # set up model
 gpflow.reset_default_graph_and_session()
@@ -174,14 +172,14 @@ with gpflow.defer_build():
     kernel.W = W
 
     # initialise mean of variational posterior to be of shape MxL
-    q_mu = q_mu_init
+    q_mu = q_mu_init.T
     # initialise \sqrt(Σ) of variational posterior to be of shape LxMxM
     q_sqrt = np.repeat(np.eye(Z.shape[0])[None, ...], K, axis=0) * 1.0
     
     likelihood = WeightedGaussian()
     m = gpflow.models.SVGP(Xtrunc, Y, kernel, likelihood, feat=feature, q_mu=q_mu, q_sqrt=q_sqrt, num_latent=tissues.size, minibatch_size=50)
     m.q_mu.transform = gpflow.transforms.Log1pe()
-    m.q_mu = np.clip(q_mu_init, 1e-8, None)
+    m.q_mu = q_mu
     
 m.compile()
 
