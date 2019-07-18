@@ -23,11 +23,12 @@ import autograd_transforms
 
 from training_and_plotting import *
 import pickle
+import sys
 
 N = 100
 M = 1
 p = 0.9
-T = 10
+T = int(sys.argv[1])
 
 save_dict = {}
 data_dict = {}
@@ -35,7 +36,7 @@ data_dict = {}
 joint_functions = [x for x in dir(joint_models) if 'functions' in x]
 marginal_functions = [x for x in dir(marginal_models) if 'functions' in x]
 
-for run in range(3):
+for run in range(100):
     # generate data
     G, X, Y, Sigma = generate_data(N, 1000, 0.5, p, T)
     data_dict[run] = (G, X, Y, Sigma)
