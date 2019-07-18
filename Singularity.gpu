@@ -1,5 +1,5 @@
 Bootstrap: docker
-From: tensorflow/tensorflow:latest-gpu-py3-jupyter
+From: tensorflow/tensorflow:1.13.1-gpu-py3-jupyter
 
 %environment
   # use bash as default shell
@@ -37,6 +37,7 @@ From: tensorflow/tensorflow:latest-gpu-py3-jupyter
   pip install cryptography
   
   pip install gpflow
+  pip install sklearn
   pip install tensorflow-probability
   pip install matplotlib
   pip install seaborn

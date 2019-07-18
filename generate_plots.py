@@ -220,15 +220,19 @@ def generate_plots(path, name):
     for k in range(K):
         lead = gmu[:, k].argmax()
         color = r2_in_range[lead]
+        for  k2 in range(K):
+            if k2 == k:
+                continue
+            else:
+                ax[k].scatter(positions, gmu[:, k2], c=color, alpha=0.01, marker='x')
+        
         ax[k].scatter(positions, gmu[:, k], c=color)
         ax[k].axvline(positions[lead])
         ax[k].set_title(r_df.index.values[lead])
-        
     plt.suptitle(gene)
     plt.tight_layout()
     plt.savefig(save_path + '/component_leads.png')
     plt.close()
-
 
 
     ##########
