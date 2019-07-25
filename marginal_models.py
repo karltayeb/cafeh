@@ -25,6 +25,7 @@ returns
     3. any other functions returend after this
 
 
+
 CURRENTLY ONLY USING LINEAR KERNEL-- should extend these function
 to take kernel as an argument
 """
@@ -77,7 +78,7 @@ def vfe(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform):
         quad = np.trace(A.T @ A)
         
         trace = np.trace(np.linalg.solve(Sigma + np.eye(N) * jitter, Kff - Qff))
-        return -0.5 * (N * np.log(2 * np.pi) + logdet + quad + trace).sum()
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
     
     
     def _optimal_u(params):
@@ -149,54 +150,14 @@ def fitc_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_tr
 
         cov = Sigma + Qff + np.diag(np.diag(Kff-Qff)) + np.eye(N) * jitter
         L = np.linalg.cholesky(cov)
-        
+
         logdet = 2 * np.sum(np.log(np.diag(L)))
         A = np.linalg.solve(L, Y)
         quad = np.trace(A.T @ A)
         trace = 0
-        
-        return -0.5 * (N * np.log(2 * np.pi) + logdet + quad + trace).sum()
+
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
     return bound, _unpack_params
-
-
-def dtc_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform):
-    """
-    function values at X are deterministic given u
-    via the conditial mean
-
-    here we ask that Sigma do all the work in explaining variance
-    from this mean
-    """
-    N, D = X.shape
-    T = Y.shape[1]
-    
-    jitter = JITTER
-    def _unpack_params(params):
-        return params.reshape(M, D+T)[:, D:], transform.forward(params.reshape(M, D+T)[:, :D])
-
-    def bound(params):
-        _, Z = _unpack_params(params)
-
-        # use a linear kernel for now
-        Kff = kernel(X, X)
-        Kfu = kernel(X, Z)
-        Kuu = kernel(Z, Z)
-        Luu = np.linalg.cholesky(Kuu + np.eye(M) * jitter)
-
-        LinvKuf = np.linalg.solve(Luu, Kfu.T)
-        Qff = LinvKuf.T @ LinvKuf
-
-        cov = Sigma + Qff + np.eye(N) * jitter
-        L = np.linalg.cholesky(cov)
-        
-        logdet = 2 * np.sum(np.log(np.diag(L)))
-        A = np.linalg.solve(L, Y)
-        quad = np.trace(A.T @ A)
-        trace = 0
-        
-        return -0.5 * (N * np.log(2 * np.pi) + logdet + quad + trace).sum()
-    return bound, _unpack_params
-
 
 def independent_causal_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False):
     """
@@ -239,11 +200,10 @@ def independent_causal_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transfo
         quad = np.trace(A.T @ A)
         trace = 0
         
-        return -0.5 * (N * np.log(2 * np.pi) + logdet + quad + trace).sum()
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
     return bound, _unpack_params
 
-
-def independent_inducing_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False):
+def independent_inducing_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False, default_variance=1.0):
     """
     here we just say that the u are iid
     its still FITC
@@ -259,7 +219,7 @@ def independent_inducing_functions(X, Y, Sigma, kernel=linear_kernel, M=5, trans
         A, Z = _unpack_params(params)
 
         if not train_A:
-            A = np.ones_like(A)
+            A = np.ones_like(A) * default_variance
 
         # use a linear kernel for now
         Kff = kernel(X, X)
@@ -280,6 +240,166 @@ def independent_inducing_functions(X, Y, Sigma, kernel=linear_kernel, M=5, trans
         quad = np.trace(A.T @ A)
         trace = 0
         
-        return -0.5 * (N * np.log(2 * np.pi) + logdet + quad + trace).sum()
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
+    return bound, _unpack_params
+
+def dtc_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform):
+    """
+    function values at X are deterministic given u
+    via the conditial mean
+
+    here we ask that Sigma do all the work in explaining variance
+    from this mean
+    """
+    N, D = X.shape
+    T = Y.shape[1]
+    
+    jitter = JITTER
+    def _unpack_params(params):
+        return params.reshape(M, D+T)[:, D:], transform.forward(params.reshape(M, D+T)[:, :D])
+
+    def bound(params):
+        _, Z = _unpack_params(params)
+
+        # use a linear kernel for now
+        Kff = kernel(X, X)
+        Kfu = kernel(X, Z)
+        Kuu = kernel(Z, Z)
+        Luu = np.linalg.cholesky(Kuu + np.eye(M) * jitter)
+
+        LinvKuf = np.linalg.solve(Luu, Kfu.T)
+        Qff = LinvKuf.T @ LinvKuf
+
+        cov = Sigma + Qff + np.eye(N) * jitter
+        L = np.linalg.cholesky(cov)
+        
+        logdet = 2 * np.sum(np.log(np.diag(L)))
+        A = np.linalg.solve(L, Y)
+        quad = np.trace(A.T @ A)
+        trace = 0
+        
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
+    return bound, _unpack_params
+
+def dtc_independent_causal_functions_old(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False, default_variance=1.0):
+    """
+    function values at X are deterministic given u
+    via the conditial mean
+
+    here we ask that Sigma do all the work in explaining variance
+    from this mean
+    """
+    N, D = X.shape
+    T = Y.shape[1]
+    
+    jitter = JITTER
+    def _unpack_params(params):
+        return np.exp(params.reshape(M, D+T)[:, D:]), transform.forward(params.reshape(M, D+T)[:, :D])
+
+    def bound(params):
+        A, Z = _unpack_params(params)
+
+        if not train_A:
+            A = np.ones_like(A) * default_variance
+
+        # use a linear kernel for now
+        Kff = kernel(X, X)
+        Kfu = kernel(X, Z)
+
+        Kuu = kernel(Z, Z)
+        Kuu = Kuu @ np.diag(A[:, 0]) @ Kuu
+        Luu = np.linalg.cholesky(Kuu + np.eye(M) * jitter)
+
+        LinvKuf = np.linalg.solve(Luu, Kfu.T)
+        Qff = LinvKuf.T @ LinvKuf
+
+        cov = Sigma + Qff + np.eye(N) * jitter
+        L = np.linalg.cholesky(cov)
+        
+        logdet = 2 * np.sum(np.log(np.diag(L)))
+        A = np.linalg.solve(L, Y)
+        quad = np.trace(A.T @ A)
+        trace = 0
+        
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
+    return bound, _unpack_params
+
+def dtc_independent_inducing_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False, default_variance=1.0):
+    """
+    function values at X are deterministic given u
+    via the conditial mean
+
+    here we ask that Sigma do all the work in explaining variance
+    from this mean
+    """
+    N, D = X.shape
+    T = Y.shape[1]
+
+    jitter = JITTER
+    def _unpack_params(params):
+        return np.exp(params.reshape(M, D+T)[:, D:]), transform.forward(params.reshape(M, D+T)[:, :D])
+
+    def bound(params):
+        A, Z = _unpack_params(params)
+
+        if not train_A:
+            A = np.ones_like(A) * default_variance
+
+        # use a linear kernel for now
+        Kff = kernel(X, X)
+        Kfu = kernel(X, Z)
+
+        Kuu = np.diag(A[:, 0])
+        Luu = np.linalg.cholesky(Kuu + np.eye(M) * jitter)
+
+        LinvKuf = np.linalg.solve(Luu, Kfu.T)
+        Qff = LinvKuf.T @ LinvKuf
+
+        cov = Sigma + Qff + np.eye(N) * jitter
+        L = np.linalg.cholesky(cov)
+        
+        logdet = 2 * np.sum(np.log(np.diag(L)))
+        A = np.linalg.solve(L, Y)
+        quad = np.trace(A.T @ A)
+        trace = 0
+        
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
+    return bound, _unpack_params
+
+def dtc_independent_causal_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False, default_variance=1.0):
+    """
+    function values at X are deterministic given u
+    via the conditial mean
+
+    here we ask that Sigma do all the work in explaining variance
+    from this mean
+    """
+    N, D = X.shape
+    T = Y.shape[1]
+    
+    jitter = JITTER
+    def _unpack_params(params):
+        return np.exp(params.reshape(M, D+T)[:, D:]), transform.forward(params.reshape(M, D+T)[:, :D])
+
+    def bound(params):
+        var, Z = _unpack_params(params)
+
+        if not train_A:
+            var = np.ones_like(var) * default_variance
+
+        # use a linear kernel for now
+        Kff = kernel(X, X)
+        Kfu = kernel(X, Z)
+
+        Qff = Kfu @ np.diag(var[:, 0]) @ Kfu.T
+
+        cov = Sigma + Qff + np.eye(N) * jitter
+        L = np.linalg.cholesky(cov)
+
+        logdet = 2 * np.sum(np.log(np.diag(L)))
+        A = np.linalg.solve(L, Y)
+        quad = np.trace(A.T @ A)
+        trace = 0
+        return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
     return bound, _unpack_params
 
