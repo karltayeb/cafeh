@@ -36,13 +36,15 @@ def simulate_genotype(N, D, maf, p):
     genotype = np.array(genotype)
     return genotype
 
-def generate_data(N, D, maf, p, T):
+def generate_data(N, D, maf, p, T, causal_idx=None):
     G = simulate_genotype(N, D, maf, p)
     Sigma = np.corrcoef(G)
 
     # pick a causal SNP
     c = np.zeros(N)
-    c[int(N/2)] = 1
+    if causal_idx is None:
+        causal_idx = int(N/2)
+    c[causal_idx] = 1
 
     # mean statistic
     f = Sigma.dot(c)
@@ -58,9 +60,9 @@ def generate_data(N, D, maf, p, T):
 
 
 # test ll at SNPs
-def test_all_points(function_generator, X, Y, Sigma, M, transform=identity_transform):
+def test_all_points(function_generator, X, Y, Sigma, M, transform=identity_transform, kwargs={}):
     T = Y.shape[1]
-    bound, _unpack_params = function_generator(X, Y, Sigma, M=M, transform=transform)[:2]
+    bound, _unpack_params = function_generator(X, Y, Sigma, M=M, transform=transform, **kwargs)[:2]
     lls = []
     for i in range(X.shape[0]):
         Z = transform.backward(np.tile(X[i][None], (M, 1)))
@@ -74,11 +76,12 @@ def plot_ll_at_points(X, Y, Sigma, functions, transform=identity_transform):
 
     fig, ax = plt.subplots(1, len(functions), sharey=False, figsize=(4 * len(functions), 3))
 
+    N = X.shape[0]
     for i, function in enumerate(functions):
         funcs = globals()[function]
         lls = test_all_points(funcs, X, Y, Sigma, 1, transform)
-        ax[i].scatter(np.arange(100), lls)
-        ax[i].scatter([50], lls[50])
+        ax[i].scatter(np.arange(N), lls)
+        ax[i].scatter([int(N/2)], lls[int(N/2)])
         ax[i].set_title(function.split('_')[0])
     return fig
 
@@ -92,7 +95,8 @@ def train(function_generator, X, Y, Sigma, M=1, transform=identity_transform,
 
     if params is None:
         if init is 'kmeans':
-            Z_init = normalize_transform.forward(KMeans(n_clusters=M).fit(X).cluster_centers_)
+            Z_init = transform.forward(KMeans(n_clusters=M).fit(X).cluster_centers_)
+
         else:
             Z_init = X[np.random.choice(N, M)]
         v_init = np.zeros((M, T))
@@ -118,6 +122,7 @@ def train(function_generator, X, Y, Sigma, M=1, transform=identity_transform,
     return Z, Z_init, params
 
 def train_and_plot(functions, X, Y, Sigma, M=1, transform=identity_transform, kwargs=None):
+    N = X.shape[0]
     if kwargs is None:
         kwargs = [{} for _ in range(len(functions))]
 
@@ -133,12 +138,12 @@ def train_and_plot(functions, X, Y, Sigma, M=1, transform=identity_transform, kw
         distances = cdist(X, Z)
         init_distances = cdist(X, Z_init)
     
-        ax[0, i].scatter(np.arange(100), lls)
-        ax[0, i].scatter([50], lls[50])
+        ax[0, i].scatter(np.arange(N), lls)
+        ax[0, i].scatter([int(N/2)], lls[int(N/2)])
 
         for j in range(M):
-            ax[j+1, i].scatter(np.arange(100), distances.T[j])            
-            ax[j+1, i].scatter([50], distances.T[j, 50])
+            ax[j+1, i].scatter(np.arange(N), distances.T[j])            
+            ax[j+1, i].scatter([int(N/2)], distances.T[j, int(N/2)])
             ax[j+1, 0].set_ylabel('distance')
 
 
@@ -147,6 +152,7 @@ def train_and_plot(functions, X, Y, Sigma, M=1, transform=identity_transform, kw
     ax[0, 0].set_ylabel('likelihoods')
 
 def train_and_plot_abscorrs(functions, X, Y, Sigma, M=1, transform=identity_transform, kwargs=None):
+    N = X.shape[0]
     if kwargs is None:
         kwargs = [{} for _ in range(len(functions))]
 
@@ -162,12 +168,12 @@ def train_and_plot_abscorrs(functions, X, Y, Sigma, M=1, transform=identity_tran
         distances = np.abs(X @ Z.T)
         init_distances = np.abs(X @ Z_init.T)
     
-        ax[0, i].scatter(np.arange(100), lls)
-        ax[0, i].scatter([50], lls[50])
+        ax[0, i].scatter(np.arange(N), lls)
+        ax[0, i].scatter([int(N/2)], lls[int(N/2)])
 
         for j in range(M):
-            ax[j+1, i].scatter(np.arange(100), distances.T[j])            
-            ax[j+1, i].scatter([50], distances.T[j, 50])
+            ax[j+1, i].scatter(np.arange(N), distances.T[j])            
+            ax[j+1, i].scatter([int(N/2)], distances.T[j, int(N/2)])
             ax[j+1, 0].set_ylabel('|correlation|')
 
 
@@ -177,6 +183,7 @@ def train_and_plot_abscorrs(functions, X, Y, Sigma, M=1, transform=identity_tran
 
 
 def train_and_plot_geodesic(functions, X, Y, Sigma, M=1, transform=identity_transform, kwargs=None):
+    N = X.shape[0]
     if kwargs is None:
         kwargs = [{} for _ in range(len(functions))]
 
@@ -192,18 +199,20 @@ def train_and_plot_geodesic(functions, X, Y, Sigma, M=1, transform=identity_tran
         distances = np.abs(X @ Z.T)
         init_distances = np.abs(X @ Z_init.T)
 
-        ax[0, i].scatter(np.arange(100), lls)
-        ax[0, i].scatter([50], lls[50])
+        ax[0, i].scatter(np.arange(N), lls)
+        ax[0, i].scatter([int(N/2)], lls[int(N/2)])
 
         for j in range(M):
-            ax[j+1, i].scatter(np.arange(100), distances.T[j])
-            ax[j+1, i].scatter([50], distances.T[j, 50])
+            ax[j+1, i].scatter(np.arange(N), distances.T[j])
+            ax[j+1, i].scatter([int(N/2)], distances.T[j, int(N/2)])
             ax[j+1, 0].set_ylabel('geodesic distance')
 
         ax[0, i].set_title('_'.join(function.split('_')[:-1]))
     ax[0, 0].set_ylabel('likelihoods')
 
 def train_and_plot_vs_init(functions, X, Y, Sigma, M=1, transform=identity_transform, kwargs=None):
+    N = X.shape[0]
+
     # pass empty kwargs if we have none
     if kwargs is None:
         kwargs = [{} for _ in range(len(functions))]
@@ -220,15 +229,15 @@ def train_and_plot_vs_init(functions, X, Y, Sigma, M=1, transform=identity_trans
         distances = cdist(X, Z)
         init_distances = cdist(X, Z_init)
 
-        ax[0, i].scatter(np.arange(100), lls)
-        ax[0, i].scatter([50], lls[50])
+        ax[0, i].scatter(np.arange(N), lls)
+        ax[0, i].scatter([int(N/2)], lls[int(N/2)])
 
         for j in range(M):
-            ax[j+1, i].scatter(np.arange(100), distances.T[j])
-            ax[j+1, i].scatter(np.arange(100), init_distances.T[j])
+            ax[j+1, i].scatter(np.arange(N), distances.T[j])
+            ax[j+1, i].scatter(np.arange(N), init_distances.T[j])
             
-            ax[j+1, i].scatter([50], distances.T[j, 50])
-            ax[j+1, i].scatter([50], init_distances.T[j, 50])
+            ax[j+1, i].scatter([int(N/2)], distances.T[j, int(N/2)])
+            ax[j+1, i].scatter([int(N/2)], init_distances.T[j, int(N/2)])
 
         ax[0, i].set_title('_'.join(function.split('_')[:-1]))
 
