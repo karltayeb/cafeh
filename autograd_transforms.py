@@ -21,19 +21,19 @@ def normalize(X):
     """
     return X / np.sqrt(np.sum(X**2, 1))[:, None]
 
-def cumsign(x):
+def cumsign(x, axis=None):
     """
     cumulative sign function-- keeps track of sign of cumulative product
     since we cant take log of negative values
     """
     neg = (x < 0)
-    return -2 * (np.mod(np.cumsum(neg, axis=1), 2) - 0.5)
+    return -2 * (np.mod(np.cumsum(neg, axis=axis), 2) - 0.5)
 
-def cumprod(x):
+def cumprod(x, axis=None):
     """
     write cumulative product in terms of sums since autograd supports that
     """
-    return cumsign(x) * np.exp(np.cumsum(np.log(np.abs(x)), axis=1))
+    return cumsign(x, axis=axis) * np.exp(np.cumsum(np.log(np.abs(x)), axis=axis))
 
 def logistic(X):
     """
@@ -47,14 +47,15 @@ def inverse_logistic(Y):
     """
     return -1 * np.log(1 / Y - 1)
 
-def spherical(X):
+def spherical(x):
     """
     squeeze unconstrained vector
     into [0, pi] x .. x [0, pi] x [0, 2pi] box
     """
-    bound = np.ones(X.shape[1] - 1) * np.pi
+    x = x[:, :-1]
+    bound = np.ones(x.shape[1]) * np.pi
     bound[-1] = 2 * np.pi
-    return bound * logistic(X[:, :-1])
+    return bound * logistic(x)
 
 def inverse_spherical(rho):
     """
@@ -70,10 +71,10 @@ def spherical_to_coords(rho):
     spheirical coordinates
     """
     rho = np.atleast_2d(rho)
-    sins = np.sin(rho)
-    coss = np.cos(rho)
-    cp = cumprod(sins)
-    return np.hstack([np.ones((cp.shape[0], 1)), cp]) * np.hstack([coss, np.ones((coss.shape[0], 1))])
+    sines = np.sin(rho)
+    cosines = np.cos(rho)
+    sine_products = cumprod(sines, axis=1)
+    return np.hstack([np.ones((sine_products.shape[0], 1)), sine_products]) * np.hstack([cosines, np.ones((cosines.shape[0], 1))])
 
 def coords_to_spherical(coords):
     """
@@ -114,6 +115,53 @@ class spherical_transform:
             inverse_spherical(coords_to_spherical(Z_transformed)),
             np.ones((Z_transformed.shape[0], 1))])
 
+class hemisspherical_transform:
+    @staticmethod
+    def forward(x):
+        x = logistic(x) * np.pi
+        rho = np.atleast_2d(x)  # M x D-1
+        sines = np.sin(rho)  # M x D-1
+        cosines = np.cos(rho)
+        sine_products = cumprod(sines, axis=1)
+
+        y = np.hstack([np.ones([sine_products.shape[0], 1]), sine_products])[:, :-1] * cosines
+        yn = np.sqrt(np.abs(1.0 - np.sum(y**2, axis=1)))[:, None]
+        return np.hstack([y, yn])  # M x D
+
+    @staticmethod
+    def backward(y):
+        square_sums = np.flip(np.cumsum(np.flip(y**2, axis=1), axis=1), axis=1)[:, :-1]
+        arc_cosines = np.arccos(y[:, :-1] / np.sqrt(square_sums))
+        arc_cosines = np.clip(arc_cosines, 1e-10, np.pi-1e-10)
+        return inverse_logistic(arc_cosines / np.pi)
+
+class spherical_transform2:
+    @staticmethod
+    def forward(x):
+        bound = np.ones(x.shape[1]) * np.pi
+        bound[-1] = 2 * np.pi
+        x = logistic(x) * bound
+
+        rho = np.atleast_2d(x)  # M x D-1
+        sines = np.sin(rho)  # M x D-1
+        cosines = np.cos(rho)
+        sine_products = cumprod(sines, axis=1)
+        return np.hstack([np.ones((sine_products.shape[0], 1)), sine_products]) * np.hstack([cosines, np.ones((cosines.shape[0], 1))])
+
+    @staticmethod
+    def backward(y):
+        bound = np.ones(y.shape[1] - 1) * np.pi
+        bound[-1] = 2 * np.pi
+
+        square_sums = np.flip(np.cumsum(np.flip(y**2, axis=1), axis=1), axis=1)[:, :-1]
+        arc_cosines = np.arccos(y[:, :-1] / np.sqrt(square_sums))
+        arc_cosines = np.clip(arc_cosines, 1e-10, np.pi-1e-10)
+
+        for i in range(y.shape[0]):
+            if y[0, -1] < 0:
+                arc_cosines[0, -1] = 2 * np.pi - arc_cosines[i, -1]
+        return inverse_logistic(arc_cosines / bound)
+
 class normalize_transform:
     @staticmethod
     def forward(Z_unconstrained):
@@ -121,5 +169,5 @@ class normalize_transform:
 
     @staticmethod
     def backward(Z_transformed):
-    	# normalizing a unit vector will give a unit vector
+        # normalizing a unit vector will give a unit vector
         return Z_transformed

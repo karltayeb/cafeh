@@ -366,7 +366,7 @@ def dtc_independent_inducing_functions(X, Y, Sigma, kernel=linear_kernel, M=5, t
         return -0.5 * (N * T * np.log(2 * np.pi) + T * logdet + quad + trace).sum()
     return bound, _unpack_params
 
-def dtc_independent_causal_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False, default_variance=1.0):
+def dtc_independent_causal_functions(X, Y, Sigma, kernel=linear_kernel, M=5, transform=identity_transform, train_A=False, default_variance=1.0, D=None):
     """
     function values at X are deterministic given u
     via the conditial mean
@@ -374,7 +374,12 @@ def dtc_independent_causal_functions(X, Y, Sigma, kernel=linear_kernel, M=5, tra
     here we ask that Sigma do all the work in explaining variance
     from this mean
     """
-    N, D = X.shape
+    if D is None:
+        N, D = X.shape
+    else:
+        N = X.shape[1]
+        D = D
+        
     T = Y.shape[1]
     
     jitter = JITTER
