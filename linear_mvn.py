@@ -1,7 +1,5 @@
 import numpy as np
 import scipy as sp
-import tensorflow as tf
-import gpflow as gpflow
 import cvxpy
 
 def get_Wt(Yt, data, problem, weights, warm):
