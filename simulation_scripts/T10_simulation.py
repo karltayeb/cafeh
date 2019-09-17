@@ -10,16 +10,22 @@ from linear_mvn import update_W_map, update_W_se, update_W
 from linear_mvn import update_variational_params_inducing
 from linear_mvn import MultipleLinearKernel, _make_covariances
 from sklearn.cluster import SpectralClustering
+from itertools import product
 
+idx = int(sys.argv[1])
 
-effectsize = float(sys.argv[1])
-kernel_type = sys.argv[2]  # sor fic or linear
-local_inducing = bool(sys.argv[3])  # boolean, do we make inducing points local?
-W_update_type = sys.argv[4]  # se, map, or full
-penalty = float(sys.argv[5])
-Q = int(sys.argv[6])
+effectsizes = [5, 10]
+kernel_types = ['sor', 'fic', 'linear']
+boolean = [True, False]
+W_updates = ['se', 'map', 'full']
+penalties = [10]
+num_components = [10, 20]
 
-save_name = 'effectsize{}_Q{}_local{}_{}_{}_lambda{}'.format(effectsize, Q, local_inducing, kernel_type, W_update_type, penalty)
+states = list(product(effectsizes, kernel_types, boolean, W_updates, penalties, num_components))
+effectsize, kernel_type, local_inducing, W_update_type, penalty, Q = \
+    states[idx]
+
+save_name = 'effectsize-{}_Q-{}_local-{}_{}_{}_lambda-{}'.format(effectsize, Q, local_inducing, kernel_type, W_update_type, penalty)
 print(save_name)
 
 if W_update_type == 'se':
