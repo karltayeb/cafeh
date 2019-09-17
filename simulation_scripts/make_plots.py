@@ -39,6 +39,8 @@ for run_id in run_ids:
     data_dict = pickle.load(
         open('./T10_simulation_output/{}'.format(run_id), 'rb'))
 
+    effectsize = float(run_id.split('_')[0][11:])
+    print(effectsize)
 
     q_gmu, q_gvar, W, indices = data_dict['q_gmu'], data_dict['q_gvar'], data_dict['W'], data_dict['local_indices']
     Y = data_dict['Y']
@@ -69,7 +71,7 @@ for run_id in run_ids:
     fig, ax = plt.subplots(1, T, figsize=(3*T, 3), sharex=True, sharey=True)
 
     for t in range(T):
-        ax[t].scatter((q_gmu@W.T)[:, t], (Sigma @ causal.T)[:, t], alpha=0.3, c='k', marker='x')
+        ax[t].scatter((q_gmu@W.T)[:, t], (effectsize * Sigma @ causal.T)[:, t], alpha=0.3, c='k', marker='x')
         ax[t].set_title('Tissue {}'.format(t))
         ax[t].set_xlabel('Mean')
     ax[0].set_ylabel('Data')
