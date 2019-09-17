@@ -58,11 +58,11 @@ for run_id in run_ids:
 
 
     plot_g(q_gmu, W, bottom=indices, top=causal_snps, title='Mean')
-    plt.savefig('./T10_simulation_figs/{}_means'.format(run_id))
+    plt.savefig('./T10_simulation_figs/{}_means.png'.format(run_id))
     plt.close()
 
     plot_g(np.array([np.diag(x) for x in q_gvar]).T, W, bottom=indices, top=causal_snps, sharey=True, title='Variance')
-    plt.savefig('./T10_simulation_figs/{}_variance'.format(run_id))
+    plt.savefig('./T10_simulation_figs/{}_variance.png'.format(run_id))
     plt.close()
 
     T = causal.shape[0]
@@ -76,4 +76,4 @@ for run_id in run_ids:
         
     plt.suptitle('Reconstruction (Noise Free)')
     plt.tight_layout(rect=[0, 0.03, 1, 0.95])
-    plt.savefig('./T10_simulation_figs/{}_reconstruction'.format(run_id))
+    plt.savefig('./T10_simulation_figs/{}_reconstruction.png'.format(run_id))
