@@ -15,17 +15,18 @@ from itertools import product
 idx = int(sys.argv[1])
 
 effectsizes = [5, 10]
-kernel_types = ['sor', 'fic', 'linear']
-boolean = [True, False]
+kernel_types = ['fic', 'linear']
+local_boolean = [True]
+regularize_Sigma = [0.1, 1.0]
 W_updates = ['se', 'map', 'full']
 penalties = [10]
-num_components = [10, 20]
+num_components = [10]
 
-states = list(product(effectsizes, kernel_types, boolean, W_updates, penalties, num_components))
-effectsize, kernel_type, local_inducing, W_update_type, penalty, Q = \
+states = list(product(effectsizes, kernel_types, local_boolean, regularize_Sigma, W_updates, penalties, num_components))
+effectsize, kernel_type, local_inducing, regularize_Sigma, W_update_type, penalty, Q = \
     states[idx]
 
-save_name = 'effectsize-{}_Q-{}_local-{}_{}_{}_lambda-{}'.format(effectsize, Q, local_inducing, kernel_type, W_update_type, penalty)
+save_name = 'e-{}_Q-{}_local-{}_reg-{}_{}_{}_lambda-{}'.format(effectsize, Q, local_inducing, regularize_Sigma, kernel_type, W_update_type, penalty)
 print(save_name)
 
 if W_update_type == 'se':
@@ -71,6 +72,8 @@ q_gvar_z = [np.eye(Z.shape[0]) for Z in Zs]
 
 # generate data
 Y = effectsize * Sigma @ causal.T + np.linalg.cholesky(Sigma + np.eye(N)*1e-6) @ np.random.normal(size=causal.T.shape)
+
+S = (Sigma + np.eye(N)*reg) / (1 + reg)
 for _ in range(100):
     print('updating variational params')
     q_gmu_z, q_gvar_z, q_gmu, q_gvar = update_variational_params_inducing(
