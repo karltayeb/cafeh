@@ -32,6 +32,7 @@ Sigma, causal_snps, tissue_membership, causal = pickle.load(
     open('./T10_simulation', 'rb'))
 
 for run_id in run_ids:
+    print(run_id)
     data_dict = pickle.load(
         open('./T10_simulation_output/{}'.format(run_id), 'rb'))
 
