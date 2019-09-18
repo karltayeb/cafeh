@@ -26,7 +26,7 @@ states = list(product(effectsizes, kernel_types, local_boolean, regularize_Sigma
 effectsize, kernel_type, local_inducing, reg, W_update_type, penalty, Q = \
     states[idx]
 
-save_name = 'e-{}_Q-{}_local-{}_reg-{}_{}_{}_lambda-{}'.format(effectsize, Q, local_inducing, regularize_Sigma, kernel_type, W_update_type, penalty)
+save_name = 'e-{}_Q-{}_local-{}_reg-{}_{}_{}_lambda-{}'.format(effectsize, Q, local_inducing, reg, kernel_type, W_update_type, penalty)
 print(save_name)
 
 if W_update_type == 'se':
@@ -77,10 +77,10 @@ S = (Sigma + np.eye(N)*reg) / (1 + reg)
 for _ in range(100):
     print('updating variational params')
     q_gmu_z, q_gvar_z, q_gmu, q_gvar = update_variational_params_inducing(
-        kernel.W, precompute, Y, Sigma, q_gmu_z, q_gvar_z, niter=10)
+        kernel.W, precompute, Y, S, q_gmu_z, q_gvar_z, niter=10)
 
     print('updating W')
-    kernel.W = np.array(W_update(Y, q_gmu, q_gvar, Sigma, penalty=penalty))
+    kernel.W = np.array(W_update(Y, q_gmu, q_gvar, S, penalty=penalty))
 
     data_dict = {
         'q_gmu': q_gmu,
