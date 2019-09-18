@@ -23,7 +23,7 @@ penalties = [10]
 num_components = [10]
 
 states = list(product(effectsizes, kernel_types, local_boolean, regularize_Sigma, W_updates, penalties, num_components))
-effectsize, kernel_type, local_inducing, regularize_Sigma, W_update_type, penalty, Q = \
+effectsize, kernel_type, local_inducing, reg, W_update_type, penalty, Q = \
     states[idx]
 
 save_name = 'e-{}_Q-{}_local-{}_reg-{}_{}_{}_lambda-{}'.format(effectsize, Q, local_inducing, regularize_Sigma, kernel_type, W_update_type, penalty)
