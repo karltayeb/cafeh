@@ -18,6 +18,8 @@ def solve_cholesky(chol, x):
 
 def update_W(Y, gmu, gvar, Sigma, penalty):
     """
+    full update for W, suffers from large trace terms
+
     quad terms summed over tissues
     trace term computed only along diagonal -- assumes unit variance
     l1 penalty on W
@@ -51,9 +53,8 @@ def update_W(Y, gmu, gvar, Sigma, penalty):
 
 def update_W_map(Y, gmu, gvar, Sigma, penalty):
     """
-    quad terms summed over tissues
-    trace term computed only along diagonal -- assumes unit variance
-    l1 penalty on W
+    trace term is 0-- estimate weights using only gmu
+    this is like not integrating over q(g) hence MAP
     """
     n, q = gmu.shape
 
@@ -85,9 +86,7 @@ def update_W_map(Y, gmu, gvar, Sigma, penalty):
 
 def update_W_se(Y, gmu, gvar, Sigma, penalty):
     """
-    quad terms summed over tissues
-    trace term computed only along diagonal -- assumes unit variance
-    l1 penalty on W
+    squarer error instead of quad term
     """
     n, q = gmu.shape
 
@@ -123,7 +122,7 @@ def _project_precomputed(Kxx, Kxz, Kzz, KxzKzzinv, gmu_z, gvar_z):
 
 def _make_pseudo_data(W, Y, qgmu, qgvar, m):
     # create pseudo data for update
-    # looks like residual after other components taken out
+    # residual after you take out expected value of other components
     gmu_del_m = np.delete(qgmu, m, axis=1)
     W_del_m = np.delete(W, m, axis=1)
 
@@ -190,6 +189,9 @@ def compute_gmu_approx_inducing(W, Y, precompute, chol, q_gmu_z, q_gvar_z, niter
                 mu_gm_z, Sigma_gm_z = _update_component_inducing(
                     W, precompute, Y, chol, q_gmu, q_gvar, component)
 
+            else:
+                mu_gm_z = np.zeros(precompute[component][2].shape[0])
+                Sigma_gm_z = np.eye(precompute[component][2].shape[0])
             # update apprxoimations
             q_gmu_z[component] = mu_gm_z
             q_gvar_z[component] = Sigma_gm_z
