@@ -84,8 +84,8 @@ max_restart = 10
 # GET SCRIPT INPUTS #
 #####################
 
-zscores_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/zscore_genes_for_Karl'
-ld_path = '/work-zfs/abattle4/karl/marios_correlation_matrices'
+zscores_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/zscore_genes_for_Karl/'
+ld_path = '/work-zfs/abattle4/karl/marios_correlation_matrices/'
 output_dir = '/work-zfs/abattle4/karl/mixed_ser/models/'
 
 #gene = sys.argv[3]
