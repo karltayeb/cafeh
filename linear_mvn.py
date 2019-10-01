@@ -254,9 +254,6 @@ def update_variational_params(W, X, Y, Sigma, q_gmu, q_gvar, niter=10, restart=T
     """
 
     chol = np.linalg.cholesky(Sigma + np.eye(Sigma.shape[0]) * 1e-6)
-    # make covariance matrices if we are not passed them
-    #if precompute is None:
-    #    precompute = _make_covariances(model.kern, X, indices)
 
     # get mean and variance on training data
     q_gmu, q_gvar = compute_gmu_approx(
