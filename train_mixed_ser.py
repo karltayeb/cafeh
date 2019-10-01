@@ -9,7 +9,8 @@ from scipy.stats import multivariate_normal
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-import pdb
+from itertools import product
+
 
 def get_inputs(zscore_path, ld_path, gene):
     X = pd.read_csv(ld_path + gene, index_col=0)
@@ -83,15 +84,44 @@ max_restart = 10
 # GET SCRIPT INPUTS #
 #####################
 
-zscores_path = sys.argv[1]
-ld_path = sys.argv[2]
-gene = sys.argv[3]
-output_dir = sys.argv[4]
-postfix = sys.argv[5]
+zscores_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/zscore_genes_for_Karl'
+ld_path = '/work-zfs/abattle4/karl/marios_correlation_matrices'
+output_dir = '/work-zfs/abattle4/karl/mixed_ser/models/'
 
-K = int(sys.argv[6])
-penalty = float(sys.argv[7])
-nonneg = bool(sys.argv[8])
+#gene = sys.argv[3]
+#postfix = sys.argv[5]
+
+#K = int(sys.argv[6])
+#penalty = float(sys.argv[7])
+#nonneg = bool(sys.argv[8])
+
+#zscores_path = sys.argv[1]
+#ld_path = sys.argv[2]
+#output_dir = sys.argv[4]
+
+
+idx = int(sys.argv[1])
+
+genes = [
+'ENSG00000073464.11',
+'ENSG00000160181.8',
+'ENSG00000100258.17',
+'ENSG00000164904.17',
+'ENSG00000135362.13',
+'ENSG00000178172.6',
+'ENSG00000141644.17',
+'ENSG00000184293.7',
+'ENSG00000141934.9',
+'ENSG00000185238.12'
+]
+
+Ks = [10, 20]
+penalties = [0.1, 1, 10, 20]
+nonnegs = [True]
+postfixes = np.arange(5)
+
+states = list(product(genes, Ks, penalties, nonnegs, postfixes))
+gene, K, penalty, nonneg, postfix = states[idx]
 
 
 print('Training mixed ser for gene {}:\n\tK={}\n\tpenalty={}\n\tnonneg={}\nSaving outputs to {}'.format(gene, K, penalty, nonneg, output_dir))
