@@ -198,6 +198,7 @@ for i in range(maxiter):
             'N': N,
             'T': T,
             'K': K,
+            'gene': gene,
             'converged': convergence_status,
             'snp_ids': snp_ids,
             'tissues': tissues}
@@ -226,6 +227,7 @@ save_dict = {
     'N': N,
     'T': T,
     'K': K,
+    'gene': gene,
     'converged': convergence_status,
     'snp_ids': snp_ids,
     'tissues': tissues}
