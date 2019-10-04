@@ -77,7 +77,7 @@ def update_weights(X, Y, pi, beta_means, beta_vars, weights, penalty, param_dict
     weight_diff = np.abs(weights - old_weights).max()
     return weight_diff
 
-maxiter = 1000
+maxiter = 5000
 max_restart = 10
 
 #####################
@@ -115,10 +115,10 @@ genes = [
 'ENSG00000185238.12'
 ]
 
-Ks = [10, 20]
-penalties = [0.1, 1, 10, 20]
-nonnegs = [True]
-postfixes = np.arange(5)
+Ks = [10]
+penalties = [1, 5, 10]
+nonnegs = [False, True]
+postfixes = np.arange(10)
 
 states = list(product(genes, Ks, penalties, nonnegs, postfixes))
 gene, K, penalty, nonneg, postfix = states[idx]
