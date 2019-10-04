@@ -11,22 +11,25 @@ def update_ss_weights(X, Y, weights, active, pi, prior_activity, prior_variance=
     old_weights = weights.copy()
     old_active = active.copy()
 
-    K = weights.shape[1]
+    T, K = weights.shape
     W = weights * np.exp(active)
-    weightseight_var = prior_variance / (1 + prior_variance)
-
+    weight_var = prior_variance / (1 + prior_variance)
     for k in range(K):
+        # get expected weights
+        W = weights * np.exp(active)
+
         # compute residual
         residual = Y - (W) @ (X @ pi).T
+
         # remove effect of kth component from residual
         r_k = residual + (W[:, k])[:, None] * (X @ pi[:, k])[None]
 
         # update p(w | s = 1)
-        weights[:, k] = weightseight_var * r_k @ pi[:, k]
+        weights[:, k] = (weight_var) * r_k @ pi[:, k]
 
         # now update p(s = 1)
         on = r_k @ pi[:, k] * weights[:, k] \
-            - 0.5 * (weights[:, k]**2 + weightseight_var) + np.log(prior_activity[k])
+            - 0.5 * (weights[:, k]**2 + weight_var) + np.log(prior_activity[k])
         # on = on - on.max()
 
         normalizer = np.log(np.exp(on) + (1-prior_activity[k]))
@@ -42,7 +45,9 @@ def update_pi(X, Y, weights, active, pi):
     K = pi.shape[1]
 
     W = weights * np.exp(active)
-    for k in range(K):
+    active_components = np.exp(active).max(0) > 1e-2
+
+    for k in np.arange(K)[active_components]:
         # compute residual
         residual = Y - W @ (X @ pi).T
 
@@ -62,6 +67,9 @@ def update_pi(X, Y, weights, active, pi):
         # should revert to prior but that might be disadvantageous
         #if ~np.any(np.isnan(pi_k)):
         pi[:, k] = pi_k
+
+    for k in np.arange(K)[~active_components]:
+        pi[:, k] = np.ones(N)/N
 
     pi_diff = np.abs(pi - old_pi).max()
     return pi_diff
