@@ -17,6 +17,8 @@ def get_inputs(zscore_path, ld_path, gene):
 
     active_snps = np.isin(zscores.index, X.index)
     Y = zscores.iloc[active_snps]
+    Y = Y.iloc[:, ~np.any(np.isnan(Y.values), 0)]
+    
 
     tissues = Y.columns.values
     snp_ids = Y.index.values

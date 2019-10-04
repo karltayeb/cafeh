@@ -27,6 +27,7 @@ def update_ss_weights(X, Y, weights, active, pi, prior_activity, prior_variance=
         # now update p(s = 1)
         on = r_k @ pi[:, k] * weights[:, k] \
             - 0.5 * (weights[:, k]**2 + weightseight_var) + np.log(prior_activity[k])
+        # on = on - on.max()
 
         normalizer = np.log(np.exp(on) + (1-prior_activity[k]))
         active[:, k] = (on - normalizer)
@@ -59,8 +60,8 @@ def update_pi(X, Y, weights, active, pi):
         # if nans dont update
         # this can happen if pi_k is 0 or constant
         # should revert to prior but that might be disadvantageous
-        if ~np.any(np.isnan(pi_k)):
-            pi[:, k] = pi_k
+        #if ~np.any(np.isnan(pi_k)):
+        pi[:, k] = pi_k
 
     pi_diff = np.abs(pi - old_pi).max()
     return pi_diff
