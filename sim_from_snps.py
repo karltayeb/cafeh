@@ -10,10 +10,9 @@ import pickle
 
 M, T, function, transform, train_params = int(sys.argv[1]), int(sys.argv[2]), sys.argv[3], sys.argv[4], bool(int(sys.argv[5]))
 
-GENE_PATH = './top_genes/'
-CORRELATION_PATH = './data/correlations/'
-MODEL_SAVE_PATH = './output/'
-ITERS = 1000
+GENE_PATH = '../GTEx_gene/'
+CORRELATION_PATH = '../correlation_matrices/'
+ITERS = 5000
 
 names = ['tissue', 'variant_id', 'tss_distance', 'ma_samples', 'ma_count', 'maf', 'pval_nominal', 'slope', 'slope_se']
 gene = 'ENSG00000101307.15'
@@ -64,8 +63,7 @@ tname = '_'.join(transform.split('_')[:-1])
 funcs = getattr(marginal_models, function)
 trans = getattr(autograd_transforms, transform)
 
-
-for run in range(2):
+for run in range(100):
     data_dict[run] = {}
     for causal_snp in causal_snps:
         causal, expected, Y = generate_data(Sigma, causal_snps=causal_snp, effect_size=1, num_tissues=T)
@@ -95,8 +93,8 @@ for run in range(2):
         pickle.dump(data_dict, open(data_save_name, 'wb'))
 
 # save save_dict
-save_name = '{}_M{}_T{}_{}_{}_{}_ouputs'.format(gene, M, T, fname, tname, train_params)
+save_name = '../simulation_from_snps/{}_M{}_T{}_{}_{}_{}_ouputs'.format(gene, M, T, fname, tname, train_params)
 pickle.dump(save_dict, open(save_name, 'wb'))
 
-data_save_name = '{}_M{}_T{}_{}_{}_{}_data'.format(gene, M, T, fname, tname, train_params)
+data_save_name = '../simulation_from_snps/{}_M{}_T{}_{}_{}_{}_data'.format(gene, M, T, fname, tname, train_params)
 pickle.dump(data_dict, open(data_save_name, 'wb'))

@@ -35,15 +35,17 @@ Sigma, causal_snps, tissue_membership, causal = pickle.load(
     open('./T10_simulation', 'rb'))
 
 for run_id in run_ids:
+    if 'effect' in run_id:
+        continue
     print(run_id)
     data_dict = pickle.load(
         open('./T10_simulation_output/{}'.format(run_id), 'rb'))
 
-    effectsize = float(run_id.split('_')[0][11:])
+    effectsize = float(run_id.split('_')[0][2:])
     print(effectsize)
 
     q_gmu, q_gvar, W, indices = data_dict['q_gmu'], data_dict['q_gvar'], data_dict['W'], data_dict['local_indices']
-    Y = data_dict['Y']
+    # Y = data_dict['Y']
 
 
     fig, ax = plt.subplots(1, 2, figsize=(10, 4))

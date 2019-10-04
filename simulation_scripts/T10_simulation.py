@@ -86,7 +86,6 @@ for _ in range(100):
         'q_gmu': q_gmu,
         'q_gvar': q_gvar,
         'W': kernel.W,
-        'Y': Y,
         'local_indices': local_indices
     }
     pickle.dump(data_dict, open(save_name, 'wb'))
