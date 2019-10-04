@@ -55,7 +55,12 @@ def update_pi(X, Y, weights, active, pi):
         # normalize to probabilities
         pi_k = np.exp(pi_k - pi_k.max() + 10)
         pi_k = pi_k / pi_k.sum()
-        pi[:, k] = pi_k
+
+        # if nans dont update
+        # this can happen if pi_k is 0 or constant
+        # should revert to prior but that might be disadvantageous
+        if ~np.any(np.isnan(pi_k)):
+            pi[:, k] = pi_k
 
     pi_diff = np.abs(pi - old_pi).max()
     return pi_diff
