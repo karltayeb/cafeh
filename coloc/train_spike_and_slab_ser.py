@@ -69,8 +69,8 @@ Ks = [5, 10, 20]
 prior_variances = [0.1, 1.0]
 postfixes = np.arange(10)
 
-states = list(product(genes, prior_variances, Ks, postfixes))
-for gene, prior_variance, K, postfix in states:
+states = list(product(postfixes, prior_variances, Ks, genes))
+for postfix, prior_variance, K, gene in states:
 
     print('Training mixed ser for gene {}:\n\tK={}\nSaving outputs to {}'.format(gene, K, output_dir))
     save_path = '{}/gene{}_sigma2{}_K{}_{}_model'.format(output_dir, gene, prior_variance, K, postfix)
