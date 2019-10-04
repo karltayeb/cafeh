@@ -116,7 +116,7 @@ for postfix, prior_variance, K, gene in states:
                 i, (0), diff))
 
         if diff < 1e-8:
-            print('weight parameter converged')
+            print('parameters converged at iter {}: diff={}'.format(i, diff))
             convergence_status = True
             break
 
