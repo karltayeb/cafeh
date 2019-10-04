@@ -32,7 +32,7 @@ def update_ss_weights(X, Y, weights, active, pi, prior_activity, prior_variance=
         active[:, k] = (on - normalizer)
 
     weight_diff = np.abs(old_weights - weights).max()
-    active_diff = np.abs(old_active - active).max()
+    active_diff = np.abs(np.exp(old_active) - np.exp(active)).max()
     return np.array([weight_diff, active_diff]).max()
 
 def update_pi(X, Y, weights, active, pi):
