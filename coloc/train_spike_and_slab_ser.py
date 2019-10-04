@@ -109,32 +109,16 @@ for gene, prior_variance, K, postfix in states:
                 break
 
         # update weights/active probabilities
-        diff = update_ss_weights(X, Y, weights, active, pi, prior_activity, prior_variance=1.0)
+        diff = update_ss_weights(X, Y, weights, active, pi, prior_activity, prior_variance)
 
-        print('iter {} outer loop elbo: {}, max_weight_diff: {}'.format(
-            i, (0), diff))
+        if i % 100 == 0:
+            print('iter {} outer loop elbo: {}, max_weight_diff: {}'.format(
+                i, (0), diff))
 
         if diff < 1e-8:
             print('weight parameter converged')
             convergence_status = True
             break
-
-        if i % 50 == 0:
-            save_dict = {
-                'pi': pi,
-                'active': active,
-                'weights': weights,
-                'prior_activity': prior_activity,
-                'prior_variance': prior_variance,
-                'K': K,
-                'N': Y.shape[1],
-                'T': Y.shape[0],
-                'gene': gene,
-                'converged': convergence_status,
-                'snp_ids': snp_ids,
-                'tissues': tissues
-            }
-            pickle.dump(save_dict, open(save_path, 'wb'))
 
     save_dict = {
         'pi': pi,
