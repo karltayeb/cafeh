@@ -47,7 +47,7 @@ nonneg = bool(sys.argv[8])
 """
 zscores_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/zscore_genes_for_Karl/'
 ld_path = '/work-zfs/abattle4/karl/marios_correlation_matrices/'
-output_dir = '/work-zfs/abattle4/karl/mixed_ser/models/'
+output_dir = '/work-zfs/abattle4/karl/ss_ser/models/'
 
 # idx = int(sys.argv[1])
 
