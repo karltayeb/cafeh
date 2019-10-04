@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 from itertools import product
 import pickle
 import sys
