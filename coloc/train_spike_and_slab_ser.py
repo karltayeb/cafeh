@@ -40,8 +40,8 @@ def get_inputs(zscore_path, ld_path, afreq_path, gene):
     X = (X + np.eye(X.shape[0])*1e-6) / (1+1e-6)
 
     # flip sign of zscore if alternate allele is major
-    chrom = snp_ids[0].split('_')[0]
-    afreq = pd.read_csv('{}/{}.afreq'.format(afreq_path, chrom))
+    chrom = snp_ids[0].split('_')[0][3:]
+    afreq = pd.read_csv('{}/chrom{}.afreq'.format(afreq_path, chrom))
 
     sign = np.ones(snp_ids.size)
     sign[afreq.set_index('ID').loc[snp_ids].ALT_FREQS > 0.5] = -1
