@@ -94,28 +94,28 @@ prior_activities = np.exp(-np.arange(2, 8))
 postfixes = np.arange(10)
 
 states = list(product(postfixes, prior_variances, prior_activities, Ks, genes))
-for postfix, prior_variance, prior_activity, K, gene in states:
+postfix, prior_variance, prior_activity, K, gene = states[int(sys.argv[1])]
 
-    print('Training spike and slab ser for gene {}:\n\tK={}, prior_variance={}, prior_activity={}, \nSaving outputs to {}'.format(
-        gene, K, prior_variance, prior_activity, output_dir))
-    model_name = 'gene{}_sigma2{}_phi{}_K{}_{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
+print('Training spike and slab ser for gene {}:\n\tK={}, prior_variance={}, prior_activity={}, \nSaving outputs to {}'.format(
+    gene, K, prior_variance, prior_activity, output_dir))
+model_name = 'gene{}_sigma2{}_phi{}_K{}_{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
 
-    ###################
-    # get Y and X #
-    ###################
-    X, Y, tissues, snp_ids = get_inputs(zscores_path, ld_path, afreq_path, gene)
-    T, N = Y.shape
+###################
+# get Y and X #
+###################
+X, Y, tissues, snp_ids = get_inputs(zscores_path, ld_path, afreq_path, gene)
+T, N = Y.shape
 
-    ###############
-    #  make model #
-    ###############
-    prior_activity = np.exp(-1*np.linspace(2, 2, K))
+###############
+#  make model #
+###############
+prior_activity = np.exp(-1*np.linspace(2, 2, K))
 
-    model = SpikeSlabSER(
-        X=X, Y=Y, K=K,
-        snp_ids=np.arange(N), tissue_ids=np.arange(T),
-        prior_activity=prior_activity * np.ones(K),
-        prior_variance=prior_variance
-    )
-    model.forward_fit(early_stop=True, verbose=True, restarts=1)
-    model.save(output_dir, model_name)
+model = SpikeSlabSER(
+    X=X, Y=Y, K=K,
+    snp_ids=np.arange(N), tissue_ids=np.arange(T),
+    prior_activity=prior_activity * np.ones(K),
+    prior_variance=prior_variance
+)
+model.forward_fit(early_stop=True, verbose=True, restarts=1)
+model.save(output_dir, model_name)
