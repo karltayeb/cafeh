@@ -97,7 +97,7 @@ states = list(product(postfixes, prior_variances, prior_activities, Ks, genes))
 postfix, prior_variance, prior_activity, K, gene = states[int(sys.argv[1])]
 
 
-model_name = 'gene-{}_sigma2-{0:.2f}_phi-{0:.2f}_K-{}_run-{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
+model_name = 'gene-{}_sigma2-{:.2f}_phi-{:.2f}_K-{}_run-{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
 
 print('Training spike and slab ser for gene {}:\n\tmodel_name={}\n\tSaving outputs to {}'.format(
     gene, model_name, output_dir))
