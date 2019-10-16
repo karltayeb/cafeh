@@ -3,11 +3,23 @@ import pandas as pd
 from itertools import product
 import pickle
 import sys
-from spike_and_slab_ser import update_ss_weights, update_pi
+from spike_and_slab_ser import SpikeSlabSER
 
-def get_inputs(zscore_path, ld_path, gene):
-    X = pd.read_csv(ld_path + gene, index_col=0)
-    zscores = pd.read_csv(zscore_path + gene + '.zscore_matrix.txt', '\t', index_col=0)
+def get_inputs(zscore_path, ld_path, afreq_path, gene):
+    """
+    zscore path: path to directory with zcore files [gene].zscore_matrix.txt'
+    ld_path: path to directory with emprical correlation matrices of snps [gene]
+    afreq_path: path to directory with allele frequency files, organized by chromasome
+    """
+    if zscore_path[-1] == '/':
+        zscore_path = zscore_path[:-1]
+    if ld_path[-1] == '/':
+        ld_path = ld_path[:-1]
+    if afreq_path[-1] == '/':
+        afreq_path = afreq_path[:-1]
+
+    X = pd.read_csv('{}/{}'.format(ld_path, gene), index_col=0)
+    zscores = pd.read_csv('{}/{}.zscore_matrix.txt'.format(zscore_path, gene), '\t', index_col=0)
 
     nan_snps = np.all(np.isnan(X.values), axis=1)
     X = X.iloc[~nan_snps].iloc[:, ~nan_snps]
@@ -18,7 +30,6 @@ def get_inputs(zscore_path, ld_path, gene):
     active_snps = np.isin(zscores.index, X.index)
     Y = zscores.iloc[active_snps]
     Y = Y.iloc[:, ~np.any(np.isnan(Y.values), 0)]
-    
 
     tissues = Y.columns.values
     snp_ids = Y.index.values
@@ -27,7 +38,16 @@ def get_inputs(zscore_path, ld_path, gene):
     Y = Y.T.values
     X = X.values
     X = (X + np.eye(X.shape[0])*1e-6) / (1+1e-6)
-    
+
+    # flip sign of zscore if alternate allele is major
+    chrom = snp_ids[0].split('_')[0]
+    afreq = pd.read_csv('{}/{}.afreq'.format(afreq_path, chrom))
+
+    sign = np.ones(snp_ids.size)
+    sign[afreq.set_index('ID').loc[snp_ids].ALT_FREQS > 0.5] = -1
+    Y = Y * sign
+    X = X * np.outer(sign, sign)
+
     return X, Y, tissues, snp_ids
 
 maxiter = 1000
@@ -50,6 +70,7 @@ nonneg = bool(sys.argv[8])
 """
 zscores_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/zscore_genes_for_Karl/'
 ld_path = '/work-zfs/abattle4/karl/marios_correlation_matrices/'
+afreq_path = '/work-zfs/abattle4/karl/afreq/'
 output_dir = '/work-zfs/abattle4/karl/ss_ser/models/'
 
 # idx = int(sys.argv[1])
@@ -67,73 +88,34 @@ genes = [
 'ENSG00000185238.12'
 ]
 
-Ks = [5, 10, 20]
-prior_variances = [0.1, 1.0]
+Ks = [20]
+prior_variances = [1.0, 10.0, 100.0]
+prior_activities = np.exp(-np.arange(2, 8))
 postfixes = np.arange(10)
 
-states = list(product(postfixes, prior_variances, Ks, genes))
-for postfix, prior_variance, K, gene in states:
+states = list(product(postfixes, prior_variances, prior_activities, Ks, genes))
+for postfix, prior_variance, prior_activity, K, gene in states:
 
-    print('Training mixed ser for gene {}:\n\tK={}\nSaving outputs to {}'.format(gene, K, output_dir))
-    save_path = '{}/gene{}_sigma2{}_K{}_{}_model'.format(output_dir, gene, prior_variance, K, postfix)
+    print('Training spike and slab ser for gene {}:\n\tK={}, prior_variance={}, prior_activity={}, \nSaving outputs to {}'.format(
+        gene, K, prior_variance, prior_activity, output_dir))
+    model_name = 'gene{}_sigma2{}_phi{}_K{}_{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
 
     ###################
     # get Y and X #
     ###################
-    X, Y, tissues, snp_ids = get_inputs(zscores_path, ld_path, gene)
+    X, Y, tissues, snp_ids = get_inputs(zscores_path, ld_path, afreq_path, gene)
     T, N = Y.shape
 
+    ###############
+    #  make model #
+    ###############
+    prior_activity = np.exp(-1*np.linspace(2, 2, K))
 
-    #######################
-    # set hyperparameters #
-    #######################
-    prior_activity = np.exp(-1 * np.linspace(1, 10, K))
-
-    #######################################
-    # initialize (variational) parameters #
-    #######################################
-    pi = np.random.random((N, K)) + 1
-    pi = pi / pi.sum(0)
-
-    weights = np.random.random((T, K)) * 5
-    active = np.ones((T, K))
-
-    # make save paths
-    convergence_status = False
-
-    for i in range(maxiter):
-        # update pi and beta
-        for j in range(100):
-            diff = update_pi(X, Y, weights, active, pi)
-
-            # exit inner loop if we converged
-            if diff < 1e-8:
-                break
-
-        # update weights/active probabilities
-        diff = update_ss_weights(X, Y, weights, active, pi, prior_activity, prior_variance)
-
-        if i % 100 == 0:
-            print('iter {} outer loop elbo: {}, max_weight_diff: {}'.format(
-                i, (0), diff))
-
-        if diff < 1e-8:
-            print('parameters converged at iter {}: diff={}'.format(i, diff))
-            convergence_status = True
-            break
-
-    save_dict = {
-        'pi': pi,
-        'active': active,
-        'weights': weights,
-        'prior_activity': prior_activity,
-        'prior_variance': prior_variance,
-        'K': K,
-        'N': Y.shape[1],
-        'T': Y.shape[0],
-        'gene': gene,
-        'converged': convergence_status,
-        'snp_ids': snp_ids,
-        'tissues': tissues
-    }
-    pickle.dump(save_dict, open(save_path, 'wb'))
+    model = SpikeSlabSER(
+        X=X, Y=Y, K=K,
+        snp_ids=np.arange(N), tissue_ids=np.arange(T),
+        prior_activity=prior_activity * np.ones(K),
+        prior_variance=prior_variance
+    )
+    model.forward_fit(early_stop=True, verbose=True, restarts=1)
+    model.save(output_dir, model_name)
