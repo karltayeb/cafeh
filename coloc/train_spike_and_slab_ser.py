@@ -96,10 +96,11 @@ postfixes = np.arange(3)
 states = list(product(postfixes, prior_variances, prior_activities, Ks, genes))
 postfix, prior_variance, prior_activity, K, gene = states[int(sys.argv[1])]
 
-print('Training spike and slab ser for gene {}:\n\tK={}, prior_variance={}, prior_activity={}, \nSaving outputs to {}'.format(
-    gene, K, prior_variance, prior_activity, output_dir))
-model_name = 'gene{}_sigma2{}_phi{}_K{}_{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
 
+model_name = 'gene-{}_sigma2-{0:.2f}_phi-{0:.2f}_K-{}_run-{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
+
+print('Training spike and slab ser for gene {}:\n\tmodel_name={}\n\tSaving outputs to {}'.format(
+    gene, model_name, output_dir))
 ###################
 # get Y and X #
 ###################
@@ -109,8 +110,6 @@ T, N = Y.shape
 ###############
 #  make model #
 ###############
-prior_activity = np.exp(-1*np.linspace(2, 2, K))
-
 model = SpikeSlabSER(
     X=X, Y=Y, K=K,
     snp_ids=np.arange(N), tissue_ids=np.arange(T),
