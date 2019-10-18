@@ -89,9 +89,9 @@ genes = [
 ]
 
 Ks = [20]
-prior_variances = [10.0, 100.0]
-prior_activities = np.exp(-np.arange(2, 5))
-postfixes = np.arange(1)
+prior_variances = [5.0, 10.0, 20.0]
+prior_activities = np.exp(-np.arange(1, 5))
+postfixes = np.arange(2)
 
 states = list(product(postfixes, prior_variances, prior_activities, Ks, genes))
 postfix, prior_variance, prior_activity, K, gene = states[int(sys.argv[1])]
@@ -112,7 +112,7 @@ T, N = Y.shape
 ###############
 model = SpikeSlabSER(
     X=X, Y=Y, K=K,
-    snp_ids=np.arange(N), tissue_ids=np.arange(T),
+    snp_ids=snp_ids, tissue_ids=tissues,
     prior_activity=prior_activity * np.ones(K),
     prior_variance=prior_variance
 )
