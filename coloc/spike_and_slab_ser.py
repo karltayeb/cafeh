@@ -352,7 +352,7 @@ class SpikeSlabSER:
         pip = np.zeros((self.N, self.T))
         for t in range(self.T):
             for n in range(self.N):
-                pip[n, t] = 1 - np.exp(np.sum(np.log(1 - self.pi[n] * self.active[t])))
+                pip[n, t] = 1 - np.exp(np.sum([np.log(1 - self.pi[n, k] * self.active[t, k]) for k in range(self.K)]))
 
         return pd.DataFrame(pip, index=self.snp_ids, columns=self.tissue_ids)
 
@@ -441,7 +441,7 @@ class SpikeSlabSER:
         plt.show()
         plt.close()
 
-    def plot_confidence_sets_ld(self, snps=None, alpha=0.9, thresh=0.1):
+    def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.1):
         if snps is None:
             snps = []
         active = self.active.max(0) > thresh
@@ -453,7 +453,7 @@ class SpikeSlabSER:
         sizes = np.array([x.size for x in snps])
 
         snps = np.concatenate(snps)
-        fig, ax = plt.subplots(1, figsize=(12, 10))
+        fig, ax = plt.subplots(1, figsize=(6, 5))
         sns.heatmap(self.X[snps][:, snps],
             cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True,
             yticklabels=self.snp_ids[snps], xticklabels=[])
@@ -676,12 +676,13 @@ class SpikeSlabSER:
             lead_snp = self.pi[:, component].argmax()
             r2 = self.X[lead_snp]**2
             ax[i].scatter(pos, logp[tissue], c=r2, cmap='RdBu_r')
-            ax[i].set_title('Tissue: {}\nLead SNP {}\nweight= {:.2f}, p={:.2f}'.format(self.tissue_ids[tissue], lead_snp, self.weights[tissue, component], self.active[tissue, component]))
+            ax[i].set_title('Tissue: {}\nLead SNP {}\nweight= {:.2f}, p={:.2f}'.format(
+                self.tissue_ids[tissue], lead_snp, self.weights[tissue, component],self.active[tissue, component]))
             ax[i].set_xlabel('SNP')
 
         ax[0].set_ylabel('-log(p)')
 
-    def plot_colocalizations(self, thresh=0.1):
+    def plot_colocalizations(self):
         fig, ax= plt.subplots(1, 3, figsize=(20, 8))
         sns.heatmap(self.get_A_intersect_B_coloc(), cmap='Blues', ax=ax[0], cbar=False, square=True)
         ax[0].set_title('At least one (intersect)')

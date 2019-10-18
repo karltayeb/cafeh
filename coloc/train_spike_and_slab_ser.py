@@ -89,8 +89,8 @@ genes = [
 ]
 
 Ks = [20]
-prior_variances = [1.0, 10.0, 100.0]
-prior_activities = np.exp(-np.arange(2, 8))
+prior_variances = [10.0, 100.0]
+prior_activities = np.exp(-np.arange(2, 5))
 postfixes = np.arange(1)
 
 states = list(product(postfixes, prior_variances, prior_activities, Ks, genes))
