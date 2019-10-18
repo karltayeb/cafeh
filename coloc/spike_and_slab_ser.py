@@ -7,7 +7,7 @@ import seaborn as sns
 import os, sys, pickle
 
 class SpikeSlabSER:
-    def __init__(self, X, Y, K, snp_ids, tissue_ids, prior_activity, prior_variance, **kwargs):
+    def __init__(self, X, Y, K, snp_ids, tissue_ids, prior_activity, prior_variance, tolerance=1e-6, **kwargs):
         """
         X [N x N] covariance matrix
         Y [T x N] matrix, Nans should be converted to 0s?
@@ -35,10 +35,12 @@ class SpikeSlabSER:
         self.active = np.ones((self.T, self.K))
         #self.active = np.random.random((self.T, self.K))
         self.elbos = []
+        self.tolerance = tolerance
 
-
-
-    def update_weights(self, components):
+    ################################
+    # UPDATE AND FITTING FUNCTIONS #
+    ################################
+    def update_weights(self, components=None):
         """
         X is LD/Covariance Matrix
         Y is T x N
@@ -88,18 +90,22 @@ class SpikeSlabSER:
             # compute residual
             residual = self.Y - W @ (self.X @ self.pi).T
 
-            # remove effect of kth component from residual
+            # remove effect of kth component from residual [t, n]
             r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
+            for t in range(self.T):
+                # q(s = 0)
+                off =  -0.5 + np.log(1 - self.prior_activity[k]) + 0.5 * np.log(self.prior_variance)
 
-            # q(s=1)
-            on = r_k @ self.pi[:, k] * self.weights[:, k] \
-                -0.5 * (self.weights[:, k]**2 + weight_var) + np.log(self.prior_activity[k])
-            #off = -0.5 * (self.prior_variance) + np.log(1 - self.prior_activity[k]) * np.ones_like(on)
-            off = np.log(1 - self.prior_activity[k]) * np.ones_like(on)
+                # q(s = 1)
+                on = r_k[t] @ self.pi[:, k] * self.weights[t, k] - 0.5 * (self.weights[t, k]**2 + weight_var) \
+                    - 0.5 * (1 / self.prior_variance) * (self.weights[t, k]**2 + weight_var) \
+                    + np.log(self.prior_activity[k]) \
+                    + 0.5 * np.log(weight_var)
 
-            u = np.stack([on, off]).T
-            u = np.exp(u - u.max(1)[:, None])
-            self.active[:, k] = u[:, 0] / u.sum(1)
+                u = np.array([on, off])
+                u = np.exp(u - u.max())
+                u = u / u.sum()
+                self.active[t, k] = u[0]
 
         active_diff = np.abs(old_active - self.active).max()
         return active_diff
@@ -149,18 +155,18 @@ class SpikeSlabSER:
             for _ in range(max_inner_iter):
                 diff1 = self.update_weights(components)
                 diff2 = self.update_active(components)
-                if diff1 < 1e-8 and diff2 < 1e-8:
+                if diff1 < self.tolerance and diff2 < self.tolerance:
                     break
             self.elbos.append(self.compute_elbo())
 
             # update pi
             for _ in range(max_inner_iter):
                 diff = self.update_pi()
-                if diff < 1e-8:
+                if diff < self.tolerance:
                     break
             self.elbos.append(self.compute_elbo())
 
-            if np.abs(self.elbos[-1] - self.elbos[-3]) < 1e-8:
+            if np.abs(self.elbos[-1] - self.elbos[-3]) < self.tolerance:
                 if verbose:
                     print('Parameters converged at iter {}'.format(i))
                 break
@@ -259,6 +265,45 @@ class SpikeSlabSER:
                     self.plot_components()
                 break
 
+    def compute_elbo(self):
+        Kzz = self.pi.T @ self.X @ self.pi
+        Kzz = Kzz + np.diag(np.ones(self.K) - np.diag(Kzz))
+        W = self.weights * self.active
+        weight_var = self.prior_variance / (1 + self.prior_variance)
+
+        bound = 0
+        for t in range(self.T):
+            bound += self.Y[t] @ (self.pi @ W[t])
+            bound += -0.5 * W[t] @ Kzz @ W[t]
+            #bound += -0.5 * np.sum(
+            #    self.active[t] * weight_var
+            #    + (1 - self.active[t]) * self.prior_variance
+            #    + (self.active[t] - self.active[t]**2) * self.weights[t]**2
+            #)
+            bound += -0.5 * np.sum(
+                (self.weights[t]**2 + weight_var) * self.active[t] - (self.weights[t] * self.active[t])**2
+            )
+
+        KL = 0
+        for t in range(self.T):
+            for k in range(self.K):
+
+                # KL (q(w|s) || p(w | s))
+                KL += normal_kl(self.weights[t, k], weight_var, 0, self.prior_variance) * self.active[t, k]
+                KL += normal_kl(0, self.prior_variance, 0, self.prior_variance) * (1 - self.active[t, k])
+
+                # KL (q(s) || p(s))
+                KL += categorical_kl(
+                    np.array([self.active[t, k], 1 - self.active[t, k]]),
+                    np.array([self.prior_activity[k], 1 - self.prior_activity[k]])
+                )
+
+        for k in range(self.K):
+            # KL (q(z) || p (z))
+            KL += categorical_kl(self.pi[:, k], np.ones(self.N) / self.N)
+        bound -= KL
+        return bound 
+
     def save(self, output_dir, model_name):
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
@@ -266,44 +311,9 @@ class SpikeSlabSER:
             output_dir = output_dir[:-1]
         pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
 
-    def plot_assignment_kl(self):
-        kls = np.zeros((self.K, self.K))
-        for k1 in range(self.K):
-            for k2 in range(self.K):
-                kls[k1, k2] = categorical_kl(self.pi[:, k1], self.pi[:, k2])
-        sns.heatmap(kls, cmap='Blues')
-        plt.title('Pairwise KL of zs')
-        plt.show()
-        plt.close()
-
-    def compute_elbo(self):
-        Kzz = self.pi.T @ self.X @ self.pi
-        Kzz = Kzz + np.diag(np.ones(self.K) - np.diag(Kzz))
-        W = self.weights * self.active
-
-        bound = 0
-        for t in range(self.T):
-            bound += self.Y[t] @ (self.pi @ W[t])
-            bound -= 0.5 * W[t] @ (Kzz @ W[t])
-
-        weight_var = self.prior_variance / (1 + self.prior_variance)
-        varW = self.active  * (weight_var) + (1 - self.active) * self.prior_variance + (self.active - self.active**2) * self.weights**2
-        bound -= 0.5 * varW.sum()
-
-        # E[logp(W)]
-        bound += ((norm.logpdf(self.weights, scale=np.sqrt(self.prior_variance)) - 0.5 * weight_var/self.prior_variance) * self.active).sum() + \
-            ((norm.logpdf(0, scale=np.sqrt(self.prior_variance)) - 0.5) * (1 - self.active)).sum()
-
-        # E[logq(W | S)]
-        bound -= ((norm.logpdf(0, scale=np.sqrt(weight_var)) - 0.5) * self.active).sum() + \
-            ((norm.logpdf(0, scale=np.sqrt(self.prior_variance)) - 0.5) * (1 - self.active)).sum()
-
-        KL = np.sum([categorical_kl(pi, np.ones(self.N)/self.N) for pi in self.pi.T])
-        KL += np.sum([[categorical_kl(
-            np.array([self.active[t, k], 1-self.active[t, k]]),
-            np.array([self.prior_activity[k], 1-self.prior_activity[k]])) for k in range(self.K)] for t in range(self.T)])
-        bound -= KL
-        return bound 
+    #########################
+    # MODEL QUERY FUNCTIONS #
+    #########################
 
     def get_top_snp_per_component(self):
         """
@@ -324,6 +334,113 @@ class SpikeSlabSER:
             confidence_sets[k] = self.snp_ids[cset]
         return confidence_sets
 
+    def get_global_colocalzation(self):
+        """
+        return pandas data frame with pairwise probability of colocalzation in at least one component
+        """
+        failure = np.ones((self.T, self.T))
+        for k in range(self.K):
+            failure *= (1 - self.active[:, k] * self.active[:, k][:, None])
+        df = pd.DataFrame(1 - failure, index=self.tissue_ids, columns=self.tissue_ids)
+        return df
+
+    def get_pip(self):
+        """
+        return posterior inclusion probability for each tissue, SNP pair
+        PIP is the probability that a SNP is the causal snp in at least one component
+        """
+        pip = np.zeros((self.N, self.T))
+        for t in range(self.T):
+            for n in range(self.N):
+                pip[n, t] = 1 - np.exp(np.sum(np.log(1 - self.pi[n] * self.active[t])))
+
+        return pd.DataFrame(pip, index=self.snp_ids, columns=self.tissue_ids)
+
+    def get_A_in_B_coloc(self):
+        """
+        returns pairwise probability that active components in tissue A
+        are a subset of the active components of tissue B
+
+        ie component k on in A -> k on in B
+           component k off in B -> k off in A
+        """
+        probs = np.zeros((self.T, self.T))
+        for t1 in range(self.T):
+            for t2 in range(self.T):
+                A = self.active[t1]
+                B = self.active[t2]
+                # 1 - p(component OFF in t2 and component ON in t1)
+                probs[t1, t2] = np.exp(np.sum(np.log((1 - (1-B) * A) + 1e-10)))
+            probs += np.eye(self.T) - np.diag(np.diag(probs))
+            
+        return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
+
+    def get_A_equals_B_coloc(self):
+        """
+        return pairwise probability that the active components in two tissues are identicle
+        component k on in A <--> k on in B
+        """
+        probs = np.zeros((self.T, self.T))
+        for t1 in range(self.T):
+            for t2 in range(self.T):
+                A = self.active[t1]
+                B = self.active[t2]
+                # prod(p(component on in both tissues) +p(component off in both tissues))
+                probs[t1, t2] = np.exp(np.sum(np.log(A * B + (1- A) * (1-B) + 1e-10)))
+            probs += np.eye(self.T) - np.diag(np.diag(probs))
+            
+        return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
+
+    def get_A_intersect_B_coloc(self):
+        """
+        return pairwise probability that at least one component is shared by both tissues
+        component k on in A AND k on in B for some k
+        """
+        probs = np.zeros((self.T, self.T))
+        for t1 in range(self.T):
+            for t2 in range(self.T):
+                A = self.active[t1]
+                B = self.active[t2]
+                # 1 - p(all components off in both tissues)
+                probs[t1, t2] = 1 - np.exp(np.sum(np.log((1 - A * B) + 1e-10)))
+
+
+            probs += np.eye(self.T) - np.diag(np.diag(probs))
+        return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
+
+    def get_component_colocalization(self):
+        """
+        for each component, get pairwise probability of colocalization
+        probability that component is active * probability that observed effect wasn't generated under null
+        """
+        p = norm.cdf(-np.abs(self.weights) / np.sqrt(self.prior_variance)) * 2
+        p = (p * self.active)
+        component_colocalization = np.stack([np.outer(p[:, k], p[:, k]) for k in range(self.K)])
+        return component_colocalization
+
+    def get_global_colocalization(self):
+        """
+        for each tissue pair, return the probability that they colocalize in atleast one component
+        """
+        componentwise = self.get_component_colocalization()
+        return 1 - np.exp(np.sum(np.log(1 - componentwise), axis=0))
+
+    ######################
+    # PLOTTING FUNCTIONS #
+    ######################
+
+    def plot_assignment_kl(self):
+        kls = np.zeros((self.K, self.K))
+        for k1 in range(self.K):
+            for k2 in range(self.K):
+                kls[k1, k2] = categorical_kl(self.pi[:, k1], self.pi[:, k2])
+        sns.heatmap(kls, cmap='Blues')
+        plt.title('Pairwise KL of Component Multinomials')
+        plt.xlabel('Component')
+        plt.ylabel('Component')
+        plt.show()
+        plt.close()
+
     def plot_confidence_sets_ld(self, snps=None, alpha=0.9, thresh=0.1):
         if snps is None:
             snps = []
@@ -337,9 +454,12 @@ class SpikeSlabSER:
 
         snps = np.concatenate(snps)
         fig, ax = plt.subplots(1, figsize=(12, 10))
-        sns.heatmap(self.X[snps][:, snps], cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True, yticklabels=self.snp_ids[snps])
+        sns.heatmap(self.X[snps][:, snps],
+            cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True,
+            yticklabels=self.snp_ids[snps], xticklabels=[])
         ax.hlines(np.cumsum(sizes), *ax.get_xlim(), colors='w', lw=3)
         ax.vlines(np.cumsum(sizes), *ax.get_ylim(), colors='w', lw=3)
+        plt.title('alpha={} confidence set LD'.format(alpha))
         plt.show()
 
     def plot_components(self, thresh=0.1):
@@ -362,7 +482,7 @@ class SpikeSlabSER:
         ax[2].set_ylabel('probability')
         ax[2].legend()
 
-        sns.heatmap(self.weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1])
+        sns.heatmap(self.weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1], yticklabels=[])
         ax[1].set_title('weights')
         ax[1].set_xlabel('component')
 
@@ -475,6 +595,9 @@ class SpikeSlabSER:
         plt.close()
 
     def plot_residual_zscores(self, tissue, components):
+        """
+        plot residual of tissue t with components removed
+        """
         fig, ax = plt.subplots(1, components+1, figsize=((components)*3, 3), sharey=False)
 
         t = np.where(self.tissue_ids == tissue)[0]
@@ -572,97 +695,6 @@ class SpikeSlabSER:
         plt.show()
         plt.close()
 
-    def get_global_colocalzation(self):
-        """
-        return pandas data frame with pairwise probability of colocalzation in at least one component
-        """
-        failure = np.ones((self.T, self.T))
-        for k in range(self.K):
-            failure *= (1 - self.active[:, k] * self.active[:, k][:, None])
-        df = pd.DataFrame(1 - failure, index=self.tissue_ids, columns=self.tissue_ids)
-        return df
-
-    def get_pip(self):
-        """
-        return posterior inclusion probability for each tissue, SNP pair
-        PIP is the probability that a SNP is the causal snp in at least one component
-        """
-        pip = np.zeros((self.N, self.T))
-        for t in range(self.T):
-            for n in range(self.N):
-                pip[n, t] = 1 - np.exp(np.sum(np.log(1 - self.pi[n] * self.active[t])))
-
-        return pd.DataFrame(pip, index=self.snp_ids, columns=self.tissue_ids)
-
-    def get_A_in_B_coloc(self):
-        """
-        returns pairwise probability that active components in tissue A
-        are a subset of the active components of tissue B
-
-        ie component k on in A -> k on in B
-           component k off in B -> k off in A
-        """
-        probs = np.zeros((self.T, self.T))
-        for t1 in range(self.T):
-            for t2 in range(self.T):
-                A = self.active[t1]
-                B = self.active[t2]
-                # 1 - p(component OFF in t2 and component ON in t1)
-                probs[t1, t2] = np.exp(np.sum(np.log((1 - (1-B) * A) + 1e-10)))
-            probs += np.eye(self.T) - np.diag(np.diag(probs))
-            
-        return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
-
-    def get_A_equals_B_coloc(self):
-        """
-        return pairwise probability that the active components in two tissues are identicle
-        component k on in A <--> k on in B
-        """
-        probs = np.zeros((self.T, self.T))
-        for t1 in range(self.T):
-            for t2 in range(self.T):
-                A = self.active[t1]
-                B = self.active[t2]
-                # prod(p(component on in both tissues) +p(component off in both tissues))
-                probs[t1, t2] = np.exp(np.sum(np.log(A * B + (1- A) * (1-B) + 1e-10)))
-            probs += np.eye(self.T) - np.diag(np.diag(probs))
-            
-        return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
-
-    def get_A_intersect_B_coloc(self):
-        """
-        return pairwise probability that at least one component is shared by both tissues
-        component k on in A AND k on in B for some k
-        """
-        probs = np.zeros((self.T, self.T))
-        for t1 in range(self.T):
-            for t2 in range(self.T):
-                A = self.active[t1]
-                B = self.active[t2]
-                # 1 - p(all components off in both tissues)
-                probs[t1, t2] = 1 - np.exp(np.sum(np.log((1 - A * B) + 1e-10)))
-
-
-            probs += np.eye(self.T) - np.diag(np.diag(probs))
-        return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
-
-    def get_component_colocalization(self):
-        """
-        for each component, get pairwise probability of colocalization
-        probability that component is active * probability that observed effect wasn't generated under null
-        """
-        p = norm.cdf(-np.abs(self.weights) / np.sqrt(self.prior_variance)) * 2
-        p = (p * self.active)
-        component_colocalization = np.stack([np.outer(p[:, k], p[:, k]) for k in range(self.K)])
-        return component_colocalization
-
-    def get_global_colocalization(self):
-        """
-        for each tissue pair, return the probability that they colocalize in atleast one component
-        """
-        componentwise = self.get_component_colocalization()
-        return 1 - np.exp(np.sum(np.log(1 - componentwise), axis=0))
-
 def unit_normal_kl(mu_q, var_q):
     """
     KL (N(mu, var) || N(0, 1))
@@ -670,6 +702,9 @@ def unit_normal_kl(mu_q, var_q):
     KL = 0.5 * (var_q + mu_q ** 2 - np.log(var_q) - 1)
     return KL
 
+def normal_kl(mu_q, var_q, mu_p, var_p):
+    KL = 0.5 * (var_q / var_p + (mu_q - mu_p)**2 / var_p - 1 + 2 * np.log(np.sqrt(var_p) / np.sqrt(var_q)))
+    return KL
 
 def categorical_kl(pi_q, pi_p):
     """
