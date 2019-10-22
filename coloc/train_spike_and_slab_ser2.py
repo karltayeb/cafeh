@@ -118,8 +118,7 @@ sign[afreq.set_index('ID').loc[snp_ids].ALT_FREQS > 0.5] = -1
 Y = Y * sign
 X = X * np.outer(sign, sign)
 
-
-    T, N = Y.shape
+T, N = Y.shape
 
 ###############
 #  make model #
