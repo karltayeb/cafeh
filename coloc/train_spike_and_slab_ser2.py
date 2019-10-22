@@ -68,16 +68,13 @@ penalty = float(sys.argv[7])
 nonneg = bool(sys.argv[8])
 
 """
-zscores_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/zscore_genes_for_Karl/'
-ld_path = '/work-zfs/abattle4/karl/marios_correlation_matrices/'
-afreq_path = '/work-zfs/abattle4/karl/afreq/'
-output_dir = '/work-zfs/abattle4/karl/ss_ser/models/'
 
-# idx = int(sys.argv[1])
 gene = 'ENSG00000239887.4'
 
 zscore_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/zscore_matrices/rs12143842_ENSG00000239887.4.zscore_matrix.txt'
 ld_path = '/work-zfs/abattle4/marios/GTEx_v8/coloc/ld_matrices/rs12143842_ENSG00000239887.4'
+afreq_path = '/work-zfs/abattle4/karl/afreq/'
+output_dir = '/work-zfs/abattle4/karl/ss_ser/models/'
 
 K = 20
 prior_variance = 20.0
@@ -91,8 +88,38 @@ print('Training spike and slab ser for gene {}:\n\tmodel_name={}\n\tSaving outpu
 ###################
 # get Y and X #
 ###################
-X, Y, tissues, snp_ids = get_inputs(zscores_path, ld_path, afreq_path, gene)
-T, N = Y.shape
+X = pd.read_csv(ld_path, index_col=0)
+zscores = pd.read_csv(zscore_path, sep='\t', index_col=0)
+
+nan_snps = np.all(np.isnan(X.values), axis=1)
+X = X.iloc[~nan_snps].iloc[:, ~nan_snps]
+
+active_snps = np.isin(X.index, zscores.index)
+X = X.iloc[active_snps].iloc[:, active_snps]
+
+active_snps = np.isin(zscores.index, X.index)
+Y = zscores.iloc[active_snps]
+Y = Y.iloc[:, ~np.any(np.isnan(Y.values), 0)]
+
+tissues = Y.columns.values
+snp_ids = Y.index.values
+pos = np.array([int(snp_id.split('_')[1]) for snp_id in snp_ids])
+
+Y = Y.T.values
+X = X.values
+X = (X + np.eye(X.shape[0])*1e-6) / (1+1e-6)
+
+# flip sign of zscore if alternate allele is major
+chrom = snp_ids[0].split('_')[0][3:]
+afreq = pd.read_csv('{}/chrom{}.afreq'.format(afreq_path, chrom))
+
+sign = np.ones(snp_ids.size)
+sign[afreq.set_index('ID').loc[snp_ids].ALT_FREQS > 0.5] = -1
+Y = Y * sign
+X = X * np.outer(sign, sign)
+
+
+    T, N = Y.shape
 
 ###############
 #  make model #
