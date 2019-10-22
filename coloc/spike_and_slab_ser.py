@@ -185,12 +185,13 @@ class SpikeSlabSER:
         elbos = []
 
         pred = (self.weights * self.active) @ (self.X @ self.pi).T
-        pi = np.exp(np.max((self.Y - pred)**2, axis=0))
+        sq_err = np.max((self.Y - pred)**2, axis=0)
+        pi = sq_err
         pi = pi / pi.sum()
 
         if plots:
             plt.scatter(np.arange(pi.size), np.log(pi))
-            plt.show()
+            # plt.show()
 
         # positive initialization
         for i in range(restarts):
@@ -322,7 +323,7 @@ class SpikeSlabSER:
         """
         return self.snp_ids[self.pi.argmax(axis=0)], self.pi.max(axis=0)
 
-    def get_confidence_sets(self, alpha=0.9, thresh=0.1):
+    def get_credible_sets(self, alpha=0.9, thresh=0.5):
         """
         return snps for active components
         """
@@ -333,16 +334,6 @@ class SpikeSlabSER:
             cset = np.flip(np.argsort(self.pi[:, k])[-cset_size:])
             confidence_sets[k] = self.snp_ids[cset]
         return confidence_sets
-
-    def get_global_colocalzation(self):
-        """
-        return pandas data frame with pairwise probability of colocalzation in at least one component
-        """
-        failure = np.ones((self.T, self.T))
-        for k in range(self.K):
-            failure *= (1 - self.active[:, k] * self.active[:, k][:, None])
-        df = pd.DataFrame(1 - failure, index=self.tissue_ids, columns=self.tissue_ids)
-        return df
 
     def get_pip(self):
         """
@@ -408,40 +399,62 @@ class SpikeSlabSER:
             probs += np.eye(self.T) - np.diag(np.diag(probs))
         return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
 
-    def get_component_colocalization(self):
-        """
-        for each component, get pairwise probability of colocalization
-        probability that component is active * probability that observed effect wasn't generated under null
-        """
-        p = norm.cdf(-np.abs(self.weights) / np.sqrt(self.prior_variance)) * 2
-        p = (p * self.active)
-        component_colocalization = np.stack([np.outer(p[:, k], p[:, k]) for k in range(self.K)])
-        return component_colocalization
-
-    def get_global_colocalization(self):
-        """
-        for each tissue pair, return the probability that they colocalize in atleast one component
-        """
-        componentwise = self.get_component_colocalization()
-        return 1 - np.exp(np.sum(np.log(1 - componentwise), axis=0))
-
     ######################
     # PLOTTING FUNCTIONS #
     ######################
 
-    def plot_assignment_kl(self):
+    def plot_assignment_kl(self, thresh=0.5, save_path=None, show=True):
         kls = np.zeros((self.K, self.K))
         for k1 in range(self.K):
             for k2 in range(self.K):
                 kls[k1, k2] = categorical_kl(self.pi[:, k1], self.pi[:, k2])
-        sns.heatmap(kls, cmap='Blues')
+        active = np.any(self.active > thresh, 0)
+        sns.heatmap(kls[active][:, active], cmap='Blues', xticklabels=np.arange(self.K)[active], yticklabels=np.arange(self.K)[active])
         plt.title('Pairwise KL of Component Multinomials')
         plt.xlabel('Component')
         plt.ylabel('Component')
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        if show:
+            plt.show()
         plt.close()
 
-    def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.1):
+    def plot_component_correlations(self, save_path=None):
+        sns.heatmap(np.abs(np.corrcoef((self.X @ self.pi).T)), cmap='Reds')
+        plt.title('Component correlation')
+        plt.xlabel('Component')
+        plt.ylabel('Component')
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
+        plt.close()
+
+    def plot_component_x_component(self, save_path=None):
+        active = np.any(self.active > 0.5, axis=0)
+        components = (self.X @ self.pi)[:, active]
+        num_active = active.sum()
+        pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
+
+        fig, ax = plt.subplots(num_active + 1, num_active + 1, figsize=(4 * (num_active+1), 4 * (num_active+1)))
+        for i in range(num_active):
+            ax[i + 1, 0].scatter(pos, components[:, i])
+            ax[i + 1, 0].set_ylabel('Component {}'.format(i))
+            ax[0, i + 1].scatter(pos, components[:, i])
+            ax[0, i + 1].set_title('Component {}'.format(i))
+
+        for i in range(num_active):
+            for j in range(num_active):
+                if i == j:
+                    ax[i+1, j+1].scatter(components[:, i], components[:, j], marker='x', alpha=0.5, c='k')
+                else:
+                    ax[i+1, j+1].scatter(components[:, i], components[:, j], marker='x', alpha=0.5, c='r')
+
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
+        plt.close()
+
+    def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
         if snps is None:
             snps = []
         active = self.active.max(0) > thresh
@@ -460,9 +473,13 @@ class SpikeSlabSER:
         ax.hlines(np.cumsum(sizes), *ax.get_xlim(), colors='w', lw=3)
         ax.vlines(np.cumsum(sizes), *ax.get_ylim(), colors='w', lw=3)
         plt.title('alpha={} confidence set LD'.format(alpha))
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        if show:
+            plt.show()
+        plt.close()
 
-    def plot_components(self, thresh=0.1):
+    def plot_components(self, thresh=0.5, save_path=None, show=True):
         """
         plot inducing point posteriors, weight means, and probabilities
         """
@@ -492,66 +509,122 @@ class SpikeSlabSER:
         ax[0].set_title('active')
         ax[0].set_xlabel('component')
 
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        if show:
+            plt.show()
         plt.close()
 
-    def plot_component_manhattan(self, effectsize=1):
-        c = (self.X @ self.pi)
-        logp = -np.log(norm.cdf(-np.abs(effectsize * c))*2)
-        pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
-
-        fig, ax = plt.subplots(1, self.K, figsize=(self.K*4, 3))
-        for k in range(self.K):
-            ax[k].scatter(pos, logp[:, k])
-
-    def plot_decomposed_manhattan(self, tissues):
-        if tissues is None:
-            tissues = np.arange(self.T)
-        else:
-            tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
-
-        pred = ((self.active * self.weights) @ (self.X @ self.pi).T)
-        logp = -np.log(norm.cdf(-np.abs(pred))*2)
-        pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
-
-
-        W = self.active * self.weights
-        c = (self.X @ self.pi)
-
-        pred = W @ c.T
-        logp = -np.log(norm.cdf(-np.abs(pred))*2)
-
-        fig, ax = plt.subplots(2, tissues.size, figsize=((self.tissue_ids.size)*3, 6), sharey=False)
-        for i, t in enumerate(self.tissue_ids):
-            lim = []
-            ax[0, i].set_title('{}\npvals'.format(self.tissue_ids[t]))
-            ax[1, i].set_title('components')
-
-            ax[0, i].scatter(pos, logp[t], marker='x', c='k', alpha=0.5)
-            lim.append(logp[t].max())
-            for k in range(self.K):
-                predk = W[t, k] * c[:, k]
-                logpk = -np.log(norm.cdf(-np.abs(predk))*2)
-                ax[1, i].scatter(pos, logpk, marker='o', alpha=0.5, label='{}'.format(k))
-                lim.append(logpk.max())
-
-            lim = np.array(lim).max()
-            ax[0, i].set_ylim(0, lim)
-            ax[1, i].set_ylim(0, lim)
-            ax[1, i].set_xlabel('SNP position')
-
-        plt.tight_layout()
-        plt.show()
-        plt.close()
-
-    def plot_decomposed_zscores(self, tissues=None, components=None):
+    def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=None):
         if tissues is None:
             tissues = np.arange(self.T)
         else:
             tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
 
         if components is None:
-            components = np.arange(self.K)
+            components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+
+        W = self.active * self.weights
+        c = (self.X @ self.pi)
+
+        pred = W @ c.T
+        logp = -norm.logcdf(-np.abs(pred)) - np.log(2)
+        pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
+
+        fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
+        for i, t in enumerate(tissues):
+            ulim = []
+            llim = []
+            ax[0, i].set_title('{}\n-log p'.format(self.tissue_ids[t]))
+            ax[1, i].set_title('components')
+            ax[0, 0].set_title('-log p')
+
+            ax[0, i].scatter(pos, logp[t], marker='x', c='k', alpha=0.5)
+            ax[0, 0].set_title('-log p')
+            ax[1, 0].set_title('- log p')
+            ulim.append(logp[t].max())
+            llim.append(logp[t].min())
+
+            ulim = []
+            llim = []
+            for k in components:
+                predk = W[t, k] * c[:, k]
+                logpk = -norm.logcdf(-np.abs(predk)) - np.log(2)
+
+                if i == 0:
+                    ax[1, i].scatter(pos, logpk, marker='o', alpha=0.5, label='k{}'.format(k))
+                else:
+                    ax[1, i].scatter(pos, logpk, marker='o', alpha=0.5)
+                ulim.append(logpk.max())
+                llim.append(logpk.min())
+
+            ulim = np.array(ulim).max()
+            llim = np.array(llim).min()
+
+            #ax[0, i].set_ylim(llim, ulim)
+            #ax[1, i].set_ylim(llim, ulim)
+            ax[1, i].set_xlabel('SNP position')
+            fig.legend()
+
+        plt.tight_layout()
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
+        plt.close()
+
+    def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, save_path=None):
+        if tissues is None:
+            tissues = np.arange(self.T)
+        else:
+            tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+
+        if components is None:
+            components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+
+        if width is None:
+            width = int(np.sqrt(tissues.size)) + 1
+            height = width
+        else:
+            height = int(tissues.size / width) + 1
+
+        pred = ((self.active * self.weights) @ (self.X @ self.pi).T)
+        logp = - norm.logcdf(-np.abs(pred)) - np.log(2)
+        pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
+
+        W = self.active * self.weights
+        c = (self.X @ self.pi)
+
+        pred = W @ c.T
+        fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
+
+        ax = np.array(ax).flatten()
+        for i, t in enumerate(tissues):
+            ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
+
+            for k in components:
+                predk = W[t, k] * c[:, k]
+                logpk = -norm.logcdf(-np.abs(predk)) - np.log(2)
+                if i == 0:
+                    ax[i].scatter(pos, logpk, marker='o', alpha=0.5, label='k{}'.format(k))
+                else:
+                    ax[i].scatter(pos, logpk, marker='o', alpha=0.5)
+            ax[i].set_xlabel('SNP position')
+            fig.legend()
+
+        plt.tight_layout()
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
+        plt.close()
+
+    def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None):
+        if tissues is None:
+            tissues = np.arange(self.T)
+        else:
+            tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+
+        if components is None:
+            components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
 
         pred = ((self.active * self.weights) @ (self.X @ self.pi).T)
         logp = -np.log(norm.cdf(-np.abs(pred))*2)
@@ -585,63 +658,152 @@ class SpikeSlabSER:
             ulim = np.array(ulim).max()
             llim = np.array(llim).min()
 
-            ax[0, i].set_ylim(llim, ulim)
-            ax[1, i].set_ylim(llim, ulim)
+            #ax[0, i].set_ylim(llim, ulim)
+            #ax[1, i].set_ylim(llim, ulim)
             ax[1, i].set_xlabel('SNP position')
             fig.legend()
 
         plt.tight_layout()
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
         plt.close()
 
-    def plot_residual_zscores(self, tissue, components):
+    def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, save_path=None):
+        if tissues is None:
+            tissues = np.arange(self.T)
+        else:
+            tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+
+        if components is None:
+            components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+
+        if width is None:
+            width = int(np.sqrt(tissues.size)) + 1
+            height = width
+        else:
+            height = int(tissues.size / width) + 1
+
+        pred = ((self.active * self.weights) @ (self.X @ self.pi).T)
+        logp = -np.log(norm.cdf(-np.abs(pred))*2)
+        pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
+
+        W = self.active * self.weights
+        c = (self.X @ self.pi)
+
+        pred = W @ c.T
+        fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
+
+        ax = np.array(ax).flatten()
+        for i, t in enumerate(tissues):
+            ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
+
+            for k in components:
+                predk = W[t, k] * c[:, k]
+                if i == 0:
+                    ax[i].scatter(pos, predk, marker='o', alpha=0.5, label='k{}'.format(k))
+                else:
+                    ax[i].scatter(pos, predk, marker='o', alpha=0.5)
+            ax[i].set_xlabel('SNP position')
+            fig.legend()
+
+        plt.tight_layout()
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
+        plt.close()
+
+    def plot_residual_zscores(self, tissues=None, components=None, save_path=None):
         """
         plot residual of tissue t with components removed
         """
-        fig, ax = plt.subplots(1, components+1, figsize=((components)*3, 3), sharey=False)
+        if tissues is None:
+            tissues = np.arange(self.T)
+        else:
+            tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
 
-        t = np.where(self.tissue_ids == tissue)[0]
+        if components is None:
+            components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+
         W = self.active * self.weights
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
-        r_k = self.Y[t]
-        logp = -np.log(2 * norm.cdf(-np.abs(r_k)))
-        ax[0].scatter(pos, r_k)
-        ax[0].set_title('residual 0 removed')
+        fig, ax = plt.subplots(components.size, tissues.size, figsize=(tissues.size*4, components.size*3), sharey=False)
+        residual = self.Y - W @ (self.X @ self.pi).T
+        for j, k in enumerate(components):
+            for i, t in enumerate(tissues):
+                residual_k = self.Y[t] - W[t, k] * (self.X @ self.pi[:, k])
+                #ax[j, i].scatter(pos, self.Y[t], alpha=0.5, marker='x', color='k')
+                #ax[j, i].scatter(pos, residual, alpha=0.5, marker='o', color='r')
+                line = np.linspace(self.Y[t].min(), self.Y[t].max(), 10)
+                ax[j, i].plot(line, line, c='b')
+                ax[j, i].scatter(self.Y[t], residual[t], alpha=0.3, marker='x', color='k', label='full residual')
 
-        for k in range(components):
-            r_k = r_k - W[t, k] * (self.X @ self.pi[:, k])
-            logp = -np.log(2 * norm.cdf(-np.abs(r_k)))
-            ax[k+1].scatter(pos, r_k)
-            ax[k+1].set_title('residual {} removed'.format(k+1))
+                if self.active[t, k] > 0.5:
+                    ax[j, i].scatter(self.Y[t], residual_k, alpha=0.5, marker='o', color='g', label='active component residual')
+                else:
+                    ax[j, i].scatter(self.Y[t], residual_k, alpha=0.5, marker='o', color='r', label='inactive component residual')
+
+                ax[j, i].set_title('{}\n{} removed'.format(self.tissue_ids[t], k))
+                ax[j, i].set_xlabel('observed z score')
+                ax[j, i].set_ylabel('residual z score')
+                ax[j, i].legend()
 
         plt.tight_layout()
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
         plt.close()
 
-    def plot_residual_manhattan(self, tissue, components):
-        fig, ax = plt.subplots(1, components+1, figsize=((components)*3, 3), sharey=False)
+    def plot_residual_manhattan(self, tissues=None, components=None, save_path=None):
+        """
+        plot residual of tissue t with components removed
+        """
+        if tissues is None:
+            tissues = np.arange(self.T)
+        else:
+            tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
 
-        t = np.where(self.tissue_ids == tissue)[0]
+        if components is None:
+            components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+
         W = self.active * self.weights
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
+        logp = -norm.logcdf(-np.abs(self.Y)) - np.log(2)
 
-        r_k = self.Y[t]
-        logp = -np.log(2 * norm.cdf(-np.abs(r_k)))
-        ax[0].scatter(pos, logp)
-        ax[0].set_title('residual 0 removed')
+        fig, ax = plt.subplots(components.size, tissues.size, figsize=(tissues.size*4, components.size*3), sharey=False)
 
-        for k in range(components):
-            r_k = r_k - W[t, k] * (self.X @ self.pi[:, k])
-            logp = -np.log(2 * norm.cdf(-np.abs(r_k)))
-            ax[k+1].scatter(pos, logp)
-            ax[k+1].set_title('residual {} removed'.format(k+1))
+        residual = self.Y - W @ (self.X @ self.pi).T
+        residual_logp = -norm.logcdf(-np.abs(residual)) - np.log(2)
+
+        for j, k in enumerate(components):
+            for i, t in enumerate(tissues):
+                residual_k = self.Y[t] - W[t, k] * (self.X @ self.pi[:, k])
+                residual_k_logp = -norm.logcdf(-np.abs(residual_k)) - np.log(2)
+  
+                #ax[j, i].scatter(pos, self.Y[t], alpha=0.5, marker='x', color='k')
+                #ax[j, i].scatter(pos, residual, alpha=0.5, marker='o', color='r')
+                line = np.linspace(logp[t].min(), logp[t].max(), 10)
+                ax[j, i].plot(line, line, c='b')
+                ax[j, i].scatter(logp[t], residual_logp[t], alpha=0.3, marker='x', color='k', label='full residual')
+
+                if self.active[t, k] > 0.5:
+                    ax[j, i].scatter(logp[t], residual_k_logp, alpha=0.5, marker='o', color='g', label='active component residual')
+                else:
+                    ax[j, i].scatter(logp[t], residual_k_logp, alpha=0.5, marker='o', color='r', label='inactive component residual')
+
+                ax[j, i].set_title('{}\n{} removed'.format(self.tissue_ids[t], k))
+                ax[j, i].set_xlabel('observed -log pvalue')
+                ax[j, i].set_ylabel('residual -log pvalue')
+                ax[j, i].legend()
 
         plt.tight_layout()
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
         plt.close()
 
-    def plot_predictions(self):
+    def plot_predictions(self, save_path=None, show=True):
         """
         plot predictions against observed z scores
         """
@@ -658,15 +820,18 @@ class SpikeSlabSER:
 
         ax[0, 0].set_ylabel('observed')
         ax[1, 0].set_ylabel('observed')
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        if show:
+            plt.show()
         plt.close()
 
-    def plot_manhattan(self, component, thresh=0.0):
+    def plot_manhattan(self, component, thresh=0.0, save_path=None):
         """
         make manhattan plot for tissues, colored by lead snp of a components
         include tissues with p(component active in tissue) > thresh
         """
-        logp = -np.log(norm.cdf(-np.abs(self.Y)) * 2)
+        logp = - norm.logcdf(-np.abs(self.Y)) - np.log(2)
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
         #sorted_tissues = np.flip(np.argsort(self.active[:, component]))
         #active_tissues = sorted_tissues[self.active[sorted_tissues, component] > thresh]
@@ -682,8 +847,13 @@ class SpikeSlabSER:
 
         ax[0].set_ylabel('-log(p)')
 
-    def plot_colocalizations(self):
-        fig, ax= plt.subplots(1, 3, figsize=(20, 8))
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
+        plt.close()
+
+    def plot_colocalizations(self, save_path=None):
+        fig, ax = plt.subplots(1, 3, figsize=(20, 8))
         sns.heatmap(self.get_A_intersect_B_coloc(), cmap='Blues', ax=ax[0], cbar=False, square=True)
         ax[0].set_title('At least one (intersect)')
 
@@ -693,7 +863,9 @@ class SpikeSlabSER:
         sns.heatmap(self.get_A_equals_B_coloc(), cmap='Blues', ax=ax[2], yticklabels=False, cbar=False, square=True)
         ax[2].set_title('A = B (all)')
 
-        plt.show()
+        if save_path is not None:
+            plt.savefig(save_path)
+        # plt.show()
         plt.close()
 
 def unit_normal_kl(mu_q, var_q):
