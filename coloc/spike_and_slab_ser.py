@@ -216,7 +216,7 @@ class SpikeSlabSER:
 
         residual = self._compute_residual()
         sq_err = np.max(residual**2, axis=0)
-        pi = sq_err * (sq_err * np.quantile(sq_err, quantile))
+        pi = sq_err * (sq_err > np.quantile(sq_err, quantile))
         pi = pi / pi.sum()
 
         if plots:
