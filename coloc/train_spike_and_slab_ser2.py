@@ -77,8 +77,8 @@ afreq_path = '/work-zfs/abattle4/karl/afreq/'
 output_dir = '/work-zfs/abattle4/karl/ss_ser/models/'
 
 K = 20
-prior_variance = 20.0
-prior_activity = np.exp(-1.0)
+prior_variance = 100.0
+prior_activity = np.exp(-2.0)
 postfix = 0
 
 model_name = 'gene-{}_sigma2-{:.2f}_phi-{:.2f}_K-{}_run-{}_model'.format(gene, prior_variance, prior_activity, K, postfix)
@@ -88,7 +88,8 @@ print('Training spike and slab ser for gene {}:\n\tmodel_name={}\n\tSaving outpu
 ###################
 # get Y and X #
 ###################
-X = pd.read_csv(ld_path, index_col=0)
+import pdb; pdb.set_trace()
+X = pd.read_csv(ld_path, sep='\t', index_col=0)
 zscores = pd.read_csv(zscore_path, sep='\t', index_col=0)
 
 nan_snps = np.all(np.isnan(X.values), axis=1)
@@ -110,14 +111,18 @@ X = X.values
 X = (X + np.eye(X.shape[0])*1e-6) / (1+1e-6)
 
 # flip sign of zscore if alternate allele is major
-chrom = snp_ids[0].split('_')[0][3:]
-afreq = pd.read_csv('{}/chrom{}.afreq'.format(afreq_path, chrom))
+chrom = snp_ids[0].split('_')[0]
+afreq = pd.read_csv('{}chrom{}.afreq'.format(afreq_path, chrom))
+
+ids = afreq.ID.values
+ids = np.array([id[3:] for id in ids])
+ids = np.array(['_'.join(x.split('_')[:2]) for x in ids])
+active = np.isin(ids, snp_ids)
 
 sign = np.ones(snp_ids.size)
-sign[afreq.set_index('ID').loc[snp_ids].ALT_FREQS > 0.5] = -1
+sign[afreq.iloc[active].ALT_FREQS > 0.5] = -1
 Y = Y * sign
 X = X * np.outer(sign, sign)
-
 T, N = Y.shape
 
 ###############

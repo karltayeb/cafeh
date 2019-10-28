@@ -10,6 +10,7 @@ class SpikeSlabSER:
     def __init__(self, X, Y, K, snp_ids, tissue_ids, prior_activity, prior_variance, tolerance=1e-6, **kwargs):
         """
         X [N x N] covariance matrix
+            if X is [T x N x N] use seperate embedding for each tissue
         Y [T x N] matrix, Nans should be converted to 0s?
         """
 
@@ -40,6 +41,30 @@ class SpikeSlabSER:
     ################################
     # UPDATE AND FITTING FUNCTIONS #
     ################################
+
+    def _compute_residual(self, k=None):
+        """
+        residual computation, works when X is 2d or 3d
+        k is a component to exclude from residual computation
+        """
+        prediction = self._compute_prediction(k)
+        residual = self.Y - prediction
+        return residual
+
+    def _compute_prediction(self, k=None):
+        W = self.weights * self.active
+        if self.X.ndim == 2:
+            prediction = W @ (self.X @ self.pi).T
+            if k is not None:
+                prediction -= W[:, k][:, None] * (self.X @ self.pi[:, k])[None]
+        if self.X.ndim == 3:
+            prediction = np.stack([W[t] @ (self.X[t] @ self.pi).T for t in range(self.T)])
+            if k is not None:
+                prediction -= np.stack(
+                    [W[t, k] * (self.X[t] @ self.pi[:, k]) for t in range(self.T)]
+                )
+        return prediction
+
     def update_weights(self, components=None):
         """
         X is LD/Covariance Matrix
@@ -59,11 +84,10 @@ class SpikeSlabSER:
             W = self.weights * self.active
 
             # compute residual
-            residual = self.Y - W @ (self.X @ self.pi).T
-
+            #residual = self.Y - W @ (self.X @ self.pi).T
             # remove effect of kth component from residual
-            r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
-
+            #r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
+            r_k = self._compute_residual(k)
             # update p(w | s = 1)
             self.weights[:, k] = (weight_var) * (r_k @ self.pi[:, k])
 
@@ -85,13 +109,14 @@ class SpikeSlabSER:
         weight_var = 1 / (1 + (1 /self.prior_variance))
         for k in components:
             # get expected weights
-            W = self.weights * self.active
+            #W = self.weights * self.active
 
             # compute residual
-            residual = self.Y - W @ (self.X @ self.pi).T
+            #residual = self.Y - W @ (self.X @ self.pi).T
 
             # remove effect of kth component from residual [t, n]
-            r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
+            #r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
+            r_k = self._compute_residual(k)
             for t in range(self.T):
                 # q(s = 0)
                 off =  -0.5 + np.log(1 - self.prior_activity[k]) + 0.5 * np.log(self.prior_variance)
@@ -124,10 +149,11 @@ class SpikeSlabSER:
 
         for k in components[active_components]:
             # compute residual
-            residual = self.Y - W @ (self.X @ self.pi).T
+            #residual = self.Y - W @ (self.X @ self.pi).T
 
             # remove effect of kth component from residual
-            r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
+            #r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
+            r_k = self._compute_residual(k)
 
             # r_k^T @ Sigma_inv @ (Sigma @ pi) @ (weights * beta)
             pi_k = r_k * W[:, k][:, None]
@@ -145,7 +171,7 @@ class SpikeSlabSER:
         pi_diff = np.abs(self.pi - old_pi).max()
         return pi_diff
 
-    def _fit(self, max_inner_iter=1, max_outer_iter=1000, bound=False, verbose=False, components=None):
+    def _fit(self, max_inner_iter=1, max_outer_iter=1000, bound=False, verbose=False, components=None, diffuse=1.0):
         """
         loop through updates until convergence
         """
@@ -161,17 +187,21 @@ class SpikeSlabSER:
 
             # update pi
             for _ in range(max_inner_iter):
-                diff = self.update_pi()
-                if diff < self.tolerance:
+                diff3 = self.update_pi()
+                self._diffuse_pi(diffuse)
+                if diff3 < self.tolerance:
                     break
             self.elbos.append(self.compute_elbo())
-
             if np.abs(self.elbos[-1] - self.elbos[-3]) < self.tolerance:
                 if verbose:
                     print('Parameters converged at iter {}'.format(i))
                 break
+            if diff1 < self.tolerance and diff2 < self.tolerance and diff3 < self.tolerance:
+                if verbose:
+                    print('Parameters converged at iter {}'.format(i))
+                break
 
-    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000, bound=False, verbose=False, restarts=1, plots=False):
+    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False):
         """
         fit self as though there were only l components
         T initializations with unit weight at each tissue, pick best solution among them
@@ -184,13 +214,13 @@ class SpikeSlabSER:
         restart_dict = {}
         elbos = []
 
-        pred = (self.weights * self.active) @ (self.X @ self.pi).T
-        sq_err = np.max((self.Y - pred)**2, axis=0)
+        residual = self._compute_residual()
+        sq_err = np.max(residual**2, axis=0)
         pi = sq_err
         pi = pi / pi.sum()
 
         if plots:
-            plt.scatter(np.arange(pi.size), np.log(pi))
+            plt.scatter(np.arange(pi.size), (pi))
             # plt.show()
 
         # positive initialization
@@ -198,8 +228,6 @@ class SpikeSlabSER:
             self.pi = init_pi
             self.active = init_active
             self.weights = init_weights
-
-            pred = (self.weights * self.active) @ (self.X @ self.pi).T
 
             # initialize activity to random
             active_t = init_active.copy()
@@ -220,8 +248,8 @@ class SpikeSlabSER:
             self.weights = weights_t
             self.pi = pi_t
 
-            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l))
-            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l))
+            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
+            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l), diffuse=diffuse)
 
             restart_dict[i] = (self.pi.copy(), self.active.copy(), self.weights.copy())
             elbos.append(self.compute_elbo())
@@ -236,7 +264,7 @@ class SpikeSlabSER:
 
         return restart_dict, elbos
 
-    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000, bound=False, verbose=False, restarts=1, plots=False):
+    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False):
         """
         forward selection scheme for variational optimization
         fit first l components with weights initialized to look at each tissue
@@ -249,7 +277,10 @@ class SpikeSlabSER:
 
         for l in range(1, self.K+1):
             print('Forward fit, learning {} components'.format(l))
-            self._forward_fit_step(l, max_inner_iter, max_outer_iter, bound, verbose, restarts)
+            self._forward_fit_step(
+                l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
+                bound=bound, verbose=verbose, restarts=restarts,
+                diffuse=diffuse, plots=plots)
 
             if plots:
                 self.plot_components()
@@ -261,19 +292,42 @@ class SpikeSlabSER:
                 # zero initialize the components
                 self.active[:, l:] = 1 - self.prior_activity[l:]
                 self.weights[:, l:] = 0
-                self._fit(max_inner_iter, max_outer_iter, bound, verbose)
+                self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, verbose=verbose, diffuse=diffuse)
                 if plots:
                     self.plot_components()
                 break
 
+    def diffusion_fit(self, schedule):
+        for i, rate in enumerate(schedule):
+            self._fit(max_outer_iter=5, verbose=True)
+            transition = np.abs(self.X) * (np.abs(self.X) > rate)
+            degree = np.diag(1 / (transition.sum(1)))
+            transition = degree @ transition
+            self.pi = transition.T @ self.pi
+
+    def _diffuse_pi(self, width):
+        if width < 1.0:
+            X = np.abs(self.X)
+            if X.ndim == 3:
+                X = np.mean(X, axis=0)
+            transition = X * (X >= width)
+            degree = np.diag(1 / (transition.sum(1)))
+            transition = degree @ transition
+            self.pi = transition.T @ self.pi
+
     def compute_elbo(self):
-        Kzz = self.pi.T @ self.X @ self.pi
-        Kzz = Kzz + np.diag(np.ones(self.K) - np.diag(Kzz))
+        bound = 0 
         W = self.weights * self.active
         weight_var = self.prior_variance / (1 + self.prior_variance)
 
-        bound = 0
+        if self.X.ndim == 2:
+            Kzz = self.pi.T @ self.X @ self.pi
+            Kzz = Kzz + np.diag(np.ones(self.K) - np.diag(Kzz))
+            self.X
         for t in range(self.T):
+            if self.X.ndim == 3:
+                Kzz = self.pi.T @ self.X[t] @ self.pi
+                Kzz = Kzz + np.diag(np.ones(self.K) - np.diag(Kzz))
             bound += self.Y[t] @ (self.pi @ W[t])
             bound += -0.5 * W[t] @ Kzz @ W[t]
             #bound += -0.5 * np.sum(
@@ -304,6 +358,15 @@ class SpikeSlabSER:
             KL += categorical_kl(self.pi[:, k], np.ones(self.N) / self.N)
         bound -= KL
         return bound 
+
+    def sort_components(self):
+        """
+        reorder components so that components with largest weights come first
+        """
+        order = np.flip(np.argsort(np.abs(self.weights).max(0)))
+        self.weights = self.weights[:, order]
+        self.active = self.active[:, order]
+        self.pi = self.pi[:, order]
 
     def save(self, output_dir, model_name):
         if not os.path.isdir(output_dir):
@@ -429,7 +492,7 @@ class SpikeSlabSER:
         # plt.show()
         plt.close()
 
-    def plot_component_x_component(self, save_path=None):
+    def plot_component_x_component(self, save_path=None, show=True):
         active = np.any(self.active > 0.5, axis=0)
         components = (self.X @ self.pi)[:, active]
         num_active = active.sum()
@@ -451,7 +514,8 @@ class SpikeSlabSER:
 
         if save_path is not None:
             plt.savefig(save_path)
-        # plt.show()
+        if show:
+            plt.show()
         plt.close()
 
     def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
@@ -515,7 +579,7 @@ class SpikeSlabSER:
             plt.show()
         plt.close()
 
-    def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=None):
+    def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=None, show=True):
         if tissues is None:
             tissues = np.arange(self.T)
         else:
@@ -569,7 +633,8 @@ class SpikeSlabSER:
         plt.tight_layout()
         if save_path is not None:
             plt.savefig(save_path)
-        # plt.show()
+        if show:
+            plt.show()
         plt.close()
 
     def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, save_path=None):
@@ -617,7 +682,7 @@ class SpikeSlabSER:
         # plt.show()
         plt.close()
 
-    def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None):
+    def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None, show=True):
         if tissues is None:
             tissues = np.arange(self.T)
         else:
@@ -666,7 +731,8 @@ class SpikeSlabSER:
         plt.tight_layout()
         if save_path is not None:
             plt.savefig(save_path)
-        # plt.show()
+        if show:
+            plt.show()
         plt.close()
 
     def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, save_path=None):
