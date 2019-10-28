@@ -216,7 +216,7 @@ class SpikeSlabSER:
 
         residual = self._compute_residual()
         sq_err = np.max(residual**2, axis=0)
-        pi = sq_err
+        pi = sq_err * (sq_err * np.quantile(sq_err, 0.5))
         pi = pi / pi.sum()
 
         if plots:
@@ -591,7 +591,7 @@ class SpikeSlabSER:
         W = self.active * self.weights
         c = (self.X @ self.pi)
 
-        pred = W @ c.T
+        pred = self._compute_prediction()
         logp = -norm.logcdf(-np.abs(pred)) - np.log(2)
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
@@ -612,7 +612,7 @@ class SpikeSlabSER:
             ulim = []
             llim = []
             for k in components:
-                predk = W[t, k] * c[:, k]
+                predk = self._compute_prediction() - self._compute_prediction(k=k)
                 logpk = -norm.logcdf(-np.abs(predk)) - np.log(2)
 
                 if i == 0:
@@ -659,7 +659,7 @@ class SpikeSlabSER:
         W = self.active * self.weights
         c = (self.X @ self.pi)
 
-        pred = W @ c.T
+        pred = self._compute_prediction()
         fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
 
         ax = np.array(ax).flatten()
@@ -667,7 +667,7 @@ class SpikeSlabSER:
             ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
 
             for k in components:
-                predk = W[t, k] * c[:, k]
+                predk = self._compute_prediction() - self._compute_prediction(k=k)
                 logpk = -norm.logcdf(-np.abs(predk)) - np.log(2)
                 if i == 0:
                     ax[i].scatter(pos, logpk, marker='o', alpha=0.5, label='k{}'.format(k))
@@ -691,7 +691,7 @@ class SpikeSlabSER:
         if components is None:
             components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
 
-        pred = ((self.active * self.weights) @ (self.X @ self.pi).T)
+        pred = self._compute_prediction()
         logp = -np.log(norm.cdf(-np.abs(pred))*2)
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
@@ -712,7 +712,7 @@ class SpikeSlabSER:
             llim.append(pred[t].min())
 
             for k in components:
-                predk = W[t, k] * c[:, k]
+                predk = self._compute_prediction() - self._compute_prediction(k=k)
                 if i == 0:
                     ax[1, i].scatter(pos, predk, marker='o', alpha=0.5, label='k{}'.format(k))
                 else:
@@ -750,7 +750,7 @@ class SpikeSlabSER:
         else:
             height = int(tissues.size / width) + 1
 
-        pred = ((self.active * self.weights) @ (self.X @ self.pi).T)
+        pred = self._compute_prediction()
         logp = -np.log(norm.cdf(-np.abs(pred))*2)
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
@@ -765,7 +765,7 @@ class SpikeSlabSER:
             ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
 
             for k in components:
-                predk = W[t, k] * c[:, k]
+                predk = self._compute_prediction() - self._compute_prediction(k=k)
                 if i == 0:
                     ax[i].scatter(pos, predk, marker='o', alpha=0.5, label='k{}'.format(k))
                 else:
