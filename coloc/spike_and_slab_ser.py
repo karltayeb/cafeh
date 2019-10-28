@@ -795,10 +795,10 @@ class SpikeSlabSER:
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
         fig, ax = plt.subplots(components.size, tissues.size, figsize=(tissues.size*4, components.size*3), sharey=False)
-        residual = self.Y - W @ (self.X @ self.pi).T
+        residual = self._compute_residual()
         for j, k in enumerate(components):
             for i, t in enumerate(tissues):
-                residual_k = self.Y[t] - W[t, k] * (self.X @ self.pi[:, k])
+                residual_k = self._compute_residual(k=k)
                 #ax[j, i].scatter(pos, self.Y[t], alpha=0.5, marker='x', color='k')
                 #ax[j, i].scatter(pos, residual, alpha=0.5, marker='o', color='r')
                 line = np.linspace(self.Y[t].min(), self.Y[t].max(), 10)
@@ -839,12 +839,12 @@ class SpikeSlabSER:
 
         fig, ax = plt.subplots(components.size, tissues.size, figsize=(tissues.size*4, components.size*3), sharey=False)
 
-        residual = self.Y - W @ (self.X @ self.pi).T
+        residual = self._compute_residual()
         residual_logp = -norm.logcdf(-np.abs(residual)) - np.log(2)
 
         for j, k in enumerate(components):
             for i, t in enumerate(tissues):
-                residual_k = self.Y[t] - W[t, k] * (self.X @ self.pi[:, k])
+                residual_k = self._compute_residual(k=k)
                 residual_k_logp = -norm.logcdf(-np.abs(residual_k)) - np.log(2)
   
                 #ax[j, i].scatter(pos, self.Y[t], alpha=0.5, marker='x', color='k')
@@ -873,7 +873,7 @@ class SpikeSlabSER:
         """
         plot predictions against observed z scores
         """
-        pred = (self.weights * self.active) @ (self.X @ self.pi).T
+        pred = self._compute_prediction()
         fig, ax = plt.subplots(2, self.T, figsize=(4*self.T, 6), sharey=True)
         for t in range(self.T):
             ax[0, t].scatter(np.arange(self.N), self.Y[t], marker='x', c='k', alpha=0.5)
