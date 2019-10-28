@@ -201,7 +201,7 @@ class SpikeSlabSER:
                     print('Parameters converged at iter {}'.format(i))
                 break
 
-    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False):
+    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.5):
         """
         fit self as though there were only l components
         T initializations with unit weight at each tissue, pick best solution among them
@@ -216,7 +216,7 @@ class SpikeSlabSER:
 
         residual = self._compute_residual()
         sq_err = np.max(residual**2, axis=0)
-        pi = sq_err * (sq_err * np.quantile(sq_err, 0.5))
+        pi = sq_err * (sq_err * np.quantile(sq_err, quantile))
         pi = pi / pi.sum()
 
         if plots:
@@ -264,7 +264,7 @@ class SpikeSlabSER:
 
         return restart_dict, elbos
 
-    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False):
+    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.5):
         """
         forward selection scheme for variational optimization
         fit first l components with weights initialized to look at each tissue
@@ -280,7 +280,7 @@ class SpikeSlabSER:
             self._forward_fit_step(
                 l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
                 bound=bound, verbose=verbose, restarts=restarts,
-                diffuse=diffuse, plots=plots)
+                diffuse=diffuse, plots=plots, quantile=quantile)
 
             if plots:
                 self.plot_components()
