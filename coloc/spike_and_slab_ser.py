@@ -31,16 +31,38 @@ class SpikeSlabSER:
         pi = pi / pi.sum(0)
 
         self.pi = pi
+        self.global_sign = np.ones(self.N)
+
         self.weights = np.random.random((self.T, self.K)) * 5
         #self.weights = np.ones((self.T, self.K))
         self.active = np.ones((self.T, self.K))
         #self.active = np.random.random((self.T, self.K))
+
         self.elbos = []
         self.tolerance = tolerance
 
     ################################
     # UPDATE AND FITTING FUNCTIONS #
     ################################
+    def _flip(self, k, thresh=0.9):
+        """
+        flip snps and zscores to avoid having two blocks of negatively correlated snps
+        k is the component to operate on
+        thresh controls how far from the lead snp of the component to flip signs on
+
+        the model keeps a global record of whats changed
+        """
+        lead_snp = global_model.pi[:, k].argmax()
+        switch = (global_model.X[lead_snp] < 0) & (np.abs(global_model.X[lead_snp]) > thresh)
+        sign[switch] *= -1
+
+        # update data and ld matrices to relfect this change in sign
+        self.Y = (self.Y * sign).astype(np.float64)
+        if self.X.ndim == 2:
+            self.X = self.X * np.outer(sign, sign).astype(np.float64)
+        else
+            self.X = self.X * np.outer(sign, sign).astype(np.float64)[None]
+        self.global_sign = self.global_sign * sign
 
     def _compute_residual(self, k=None):
         """
@@ -249,6 +271,7 @@ class SpikeSlabSER:
             self.pi = pi_t
 
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
+            self._flip(k=l-1, thresh=0.9)
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l), diffuse=diffuse)
 
             restart_dict[i] = (self.pi.copy(), self.active.copy(), self.weights.copy())
