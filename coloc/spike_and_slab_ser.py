@@ -289,7 +289,6 @@ class SpikeSlabSER:
             
             # orient nearby snps and retrain component
             self._flip(k=l-1, thresh=0.9)
-            self._diffuse_pi(width=0.9)
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
 
             # fit the whole model up to this component
