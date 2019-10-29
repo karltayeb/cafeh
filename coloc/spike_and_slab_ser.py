@@ -60,7 +60,7 @@ class SpikeSlabSER:
         self.Y = (self.Y * sign).astype(np.float64)
         if self.X.ndim == 2:
             self.X = self.X * np.outer(sign, sign).astype(np.float64)
-        else
+        else:
             self.X = self.X * np.outer(sign, sign).astype(np.float64)[None]
         self.global_sign = self.global_sign * sign
 
