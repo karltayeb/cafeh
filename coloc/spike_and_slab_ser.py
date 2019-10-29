@@ -201,7 +201,7 @@ class SpikeSlabSER:
                     print('Parameters converged at iter {}'.format(i))
                 break
 
-    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.5):
+    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.0):
         """
         fit self as though there were only l components
         T initializations with unit weight at each tissue, pick best solution among them
@@ -264,7 +264,7 @@ class SpikeSlabSER:
 
         return restart_dict, elbos
 
-    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.5):
+    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.0):
         """
         forward selection scheme for variational optimization
         fit first l components with weights initialized to look at each tissue
@@ -287,7 +287,8 @@ class SpikeSlabSER:
 
             # if the next step turned off the component, all future steps will
             # zero them out and do a final fit of the self
-            if self.pi[:, l-1].max() < 0.01 and early_stop:
+            # if self.pi[:, l-1].max() < 0.01 and early_stop:
+            if early_stop and self.active[:, l-1].max() < 0.5:
                 print('learned inactive cluster, finalizing parameters')
                 # zero initialize the components
                 self.active[:, l:] = 1 - self.prior_activity[l:]
