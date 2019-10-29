@@ -339,7 +339,7 @@ class SpikeSlabSER:
                 break
 
             print('finalizing components')
-            self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, verbose=verbose, diffuse=diffuse)
+            self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, verbose=verbose)
             if plots:
                 self.plot_components()
 
