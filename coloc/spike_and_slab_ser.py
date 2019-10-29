@@ -338,10 +338,10 @@ class SpikeSlabSER:
                 self.weights[:, l:] = 0
                 break
 
-            print('finalizing components')
-            self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, verbose=verbose)
-            if plots:
-                self.plot_components()
+        print('finalizing components')
+        self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, verbose=verbose)
+        if plots:
+            self.plot_components()
 
     def diffusion_fit(self, schedule):
         for i, rate in enumerate(schedule):
