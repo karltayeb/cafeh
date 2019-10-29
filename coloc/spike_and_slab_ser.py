@@ -332,14 +332,16 @@ class SpikeSlabSER:
             # zero them out and do a final fit of the self
             # if self.pi[:, l-1].max() < 0.01 and early_stop:
             if early_stop and self.active[:, l-1].max() < 0.5:
-                print('learned inactive cluster, finalizing parameters')
+                print('learned inactive components')
                 # zero initialize the components
                 self.active[:, l:] = 1 - self.prior_activity[l:]
                 self.weights[:, l:] = 0
-                self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, verbose=verbose, diffuse=diffuse)
-                if plots:
-                    self.plot_components()
                 break
+
+            print('finalizing components')
+            self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, verbose=verbose, diffuse=diffuse)
+            if plots:
+                self.plot_components()
 
     def diffusion_fit(self, schedule):
         for i, rate in enumerate(schedule):
