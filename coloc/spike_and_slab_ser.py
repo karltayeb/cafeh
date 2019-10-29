@@ -695,11 +695,7 @@ class SpikeSlabSER:
         logp = -np.log(norm.cdf(-np.abs(pred))*2)
         pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
-
-        W = self.active * self.weights
-        c = (self.X @ self.pi)
-
-        pred = W @ c.T
+        pred = self._compute_prediction()
         fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
         for i, t in enumerate(tissues):
             ulim = []
