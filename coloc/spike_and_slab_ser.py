@@ -65,6 +65,20 @@ class SpikeSlabSER:
             self.X = self.X * np.outer(sign, sign).astype(np.float64)[None]
         self.global_sign = self.global_sign * sign
 
+    def _diffuse_pi(self, width):
+        """
+        spread mass of pi around snps in high ld
+        cutoff is width for edges to include in graph diffusion
+        """
+        if width < 1.0:
+            X = np.abs(self.X)
+            if X.ndim == 3:
+                X = np.mean(X, axis=0)
+            transition = X * (X >= width).astype(np.float64)
+            inv_degree = np.diag(1 / (transition.sum(1)))
+            transition = inv_degree @ transition
+            self.pi = transition.T @ self.pi
+
     def _compute_residual(self, k=None):
         """
         residual computation, works when X is 2d or 3d
@@ -272,9 +286,13 @@ class SpikeSlabSER:
             self.pi = pi_t
 
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
+            
+            # orient nearby snps and retrain component
             self._flip(k=l-1, thresh=0.9)
+            self._diffuse_pi(width=0.9)
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
 
+            # fit the whole model up to this component
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l), diffuse=diffuse)
 
             restart_dict[i] = (self.pi.copy(), self.active.copy(), self.weights.copy())
@@ -328,16 +346,6 @@ class SpikeSlabSER:
         for i, rate in enumerate(schedule):
             self._fit(max_outer_iter=5, verbose=True)
             transition = np.abs(self.X) * (np.abs(self.X) > rate)
-            degree = np.diag(1 / (transition.sum(1)))
-            transition = degree @ transition
-            self.pi = transition.T @ self.pi
-
-    def _diffuse_pi(self, width):
-        if width < 1.0:
-            X = np.abs(self.X)
-            if X.ndim == 3:
-                X = np.mean(X, axis=0)
-            transition = X * (X >= width)
             degree = np.diag(1 / (transition.sum(1)))
             transition = degree @ transition
             self.pi = transition.T @ self.pi
