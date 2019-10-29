@@ -708,7 +708,7 @@ class SpikeSlabSER:
             llim.append(pred[t].min())
 
             for k in components:
-                predk = self._compute_prediction() - self._compute_prediction(k=k)
+                predk = self._compute_prediction()[t] - self._compute_prediction(k=k)[t]
                 if i == 0:
                     ax[1, i].scatter(pos, predk, marker='o', alpha=0.5, label='k{}'.format(k))
                 else:
