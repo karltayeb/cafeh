@@ -52,8 +52,9 @@ class SpikeSlabSER:
 
         the model keeps a global record of whats changed
         """
-        lead_snp = global_model.pi[:, k].argmax()
-        switch = (global_model.X[lead_snp] < 0) & (np.abs(global_model.X[lead_snp]) > thresh)
+        sign = np.ones(self.N)
+        lead_snp = self.pi[:, k].argmax()
+        switch = (self.X[lead_snp] < 0) & (np.abs(self.X[lead_snp]) > thresh)
         sign[switch] *= -1
 
         # update data and ld matrices to relfect this change in sign
