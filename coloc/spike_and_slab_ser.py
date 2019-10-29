@@ -238,7 +238,9 @@ class SpikeSlabSER:
                     print('Parameters converged at iter {}'.format(i))
                 break
 
-    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.0):
+    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000,
+                          diffuse=1.0, quantile=0.0, flip=False,
+                          bound=False, verbose=False, restarts=1, plots=False):
         """
         fit self as though there were only l components
         T initializations with unit weight at each tissue, pick best solution among them
@@ -288,8 +290,10 @@ class SpikeSlabSER:
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
             
             # orient nearby snps and retrain component
-            self._flip(k=l-1, thresh=0.9)
-            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
+            if flip:
+                self._flip(k=l-1, thresh=0.9)
+                self._diffuse_pi(width=0.9)
+                self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
 
             # fit the whole model up to this component
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l), diffuse=diffuse)
@@ -307,7 +311,9 @@ class SpikeSlabSER:
 
         return restart_dict, elbos
 
-    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000, diffuse=1.0, bound=False, verbose=False, restarts=1, plots=False, quantile=0.0):
+    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000,
+                    diffuse=1.0, quantile=0.0, flip=False,
+                    bound=False, verbose=False, restarts=1, plots=False):
         """
         forward selection scheme for variational optimization
         fit first l components with weights initialized to look at each tissue
@@ -323,7 +329,7 @@ class SpikeSlabSER:
             self._forward_fit_step(
                 l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
                 bound=bound, verbose=verbose, restarts=restarts,
-                diffuse=diffuse, plots=plots, quantile=quantile)
+                diffuse=diffuse, plots=plots, quantile=quantile, flip=flip)
 
             if plots:
                 self.plot_components()
