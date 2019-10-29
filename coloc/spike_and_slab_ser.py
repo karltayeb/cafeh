@@ -273,6 +273,8 @@ class SpikeSlabSER:
 
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
             self._flip(k=l-1, thresh=0.9)
+            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
+
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l), diffuse=diffuse)
 
             restart_dict[i] = (self.pi.copy(), self.active.copy(), self.weights.copy())
