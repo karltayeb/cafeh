@@ -322,7 +322,7 @@ class SpikeSlabSER:
             print('Forward fit, learning {} components'.format(l))
             self._forward_fit_step(
                 l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
-                diffuse=diffuse, quantile=quantile, flip=flip,
+                diffuse=diffuse, quantile=quantile,
                 bound=bound, verbose=verbose, restarts=restarts, plots=plots)
 
             # orient nearby snps and retrain component
@@ -330,7 +330,7 @@ class SpikeSlabSER:
                 self._flip(k=l-1, thresh=0.9)
                 self._forward_fit_step(
                     l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
-                    diffuse=diffuse, quantile=quantile, flip=flip,
+                    diffuse=diffuse, quantile=quantile,
                     bound=bound, verbose=verbose, restarts=restarts, plots=plots)
             if plots:
                 self.plot_components()
