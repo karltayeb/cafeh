@@ -239,7 +239,7 @@ class SpikeSlabSER:
                 break
 
     def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000,
-                          diffuse=1.0, quantile=0.0, flip=False,
+                          diffuse=1.0, quantile=0.0,
                           bound=False, verbose=False, restarts=1, plots=False):
         """
         fit self as though there were only l components
@@ -288,12 +288,6 @@ class SpikeSlabSER:
             self.pi = pi_t
 
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
-            
-            # orient nearby snps and retrain component
-            if flip:
-                self._flip(k=l-1, thresh=0.9)
-                self._diffuse_pi(width=0.9)
-                self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
 
             # fit the whole model up to this component
             self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l), diffuse=diffuse)
@@ -328,9 +322,16 @@ class SpikeSlabSER:
             print('Forward fit, learning {} components'.format(l))
             self._forward_fit_step(
                 l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
-                bound=bound, verbose=verbose, restarts=restarts,
-                diffuse=diffuse, plots=plots, quantile=quantile, flip=flip)
+                diffuse=diffuse, quantile=quantile, flip=flip,
+                bound=bound, verbose=verbose, restarts=restarts, plots=plots)
 
+            # orient nearby snps and retrain component
+            if flip:
+                self._flip(k=l-1, thresh=0.9)
+                self._forward_fit_step(
+                    l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
+                    diffuse=diffuse, quantile=quantile, flip=flip,
+                    bound=bound, verbose=verbose, restarts=restarts, plots=plots)
             if plots:
                 self.plot_components()
 
