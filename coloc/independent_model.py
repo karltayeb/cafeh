@@ -25,7 +25,7 @@ class SpikeSlabSer:
 
         # set priors
         T, M = Y.shape
-        N = X.shape
+        N = X.shape[0]
         self.dims = {'N': N, 'M': M, 'T': T, 'K': K}
 
         self.prior_weight_variance = prior_weight_variance
