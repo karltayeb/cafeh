@@ -16,3 +16,9 @@ def categorical_kl(pi_q, pi_p):
     KL(pi_q || pi_p)
     """
     return np.sum(pi_q * (np.log(pi_q + 1e-10) - np.log(pi_p + 1e-10)))
+
+def bernoulli_kl(q, p):
+    """
+    q and p are probability of success
+    """
+    return q * np.log(q) + (1 - q) * np.log(1 - q) - q * np.log(p) - (1 - q) * np.log(1 - p)
