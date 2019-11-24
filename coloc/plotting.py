@@ -109,7 +109,9 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
     ax[2].set_ylabel('probability')
     ax[2].legend()
 
-    sns.heatmap(weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1], yticklabels=[])
+    vmax = np.abs(weights[:, active_components]).max()
+    vmin = -vmax
+    sns.heatmap(weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1], yticklabels=[], vmin=vmin, vmax=vmax)
     ax[1].set_title('weights')
     ax[1].set_xlabel('component')
 
