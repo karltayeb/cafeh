@@ -21,4 +21,4 @@ def bernoulli_kl(q, p):
     """
     q and p are probability of success
     """
-    return q * np.log(q) + (1 - q) * np.log(1 - q) - q * np.log(p) - (1 - q) * np.log(1 - p)
+    return q * np.log(q +1e-10) + (1 - q) * np.log(1 - q + 1e-10) - q * np.log(p + 1e-10) - (1 - q) * np.log(1 - p + 1e-10)

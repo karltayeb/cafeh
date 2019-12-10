@@ -10,12 +10,12 @@ import pickle
 ######################
 
 def plot_assignment_kl(self, thresh=0.5, save_path=None, show=True):
-    kls = np.zeros((self.K, self.K))
-    for k1 in range(self.K):
-        for k2 in range(self.K):
-            kls[k1, k2] = categorical_kl(self.pi[:, k1], self.pi[:, k2])
+    kls = np.zeros((self.dims['K'], self.dims['K']))
+    for k1 in range(self.dims['K']):
+        for k2 in range(self.dims['K']):
+            kls[k1, k2] = categorical_kl(self.pi.T[:, k1], self.pi.T[:, k2])
     active = np.any(self.active > thresh, 0)
-    sns.heatmap(kls[active][:, active], cmap='Blues', xticklabels=np.arange(self.K)[active], yticklabels=np.arange(self.K)[active])
+    sns.heatmap(kls[active][:, active], cmap='Blues', xticklabels=np.arange(self.dims['K'])[active], yticklabels=np.arange(self.dims['K'])[active])
     plt.title('Pairwise KL of Component Multinomials')
     plt.xlabel('Component')
     plt.ylabel('Component')
@@ -26,7 +26,7 @@ def plot_assignment_kl(self, thresh=0.5, save_path=None, show=True):
     plt.close()
 
 def plot_component_correlations(self, save_path=None):
-    sns.heatmap(np.abs(np.corrcoef((self.X @ self.pi).T)), cmap='Reds')
+    sns.heatmap(np.abs(np.corrcoef((self.X @ self.pi.T).T)), cmap='Reds')
     plt.title('Component correlation')
     plt.xlabel('Component')
     plt.ylabel('Component')
@@ -37,7 +37,7 @@ def plot_component_correlations(self, save_path=None):
 
 def plot_component_x_component(self, save_path=None, show=True):
     active = np.any(self.active > 0.5, axis=0)
-    components = (self.X @ self.pi)[:, active]
+    components = (self.X @ self.pi.T)[:, active]
     num_active = active.sum()
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
@@ -61,18 +61,40 @@ def plot_component_x_component(self, save_path=None, show=True):
         plt.show()
     plt.close()
 
+def plot_pips(self, thresh=0.5, star=None, save_path=None, show=True):
+    pips = self.get_pip()
+    cs, purities = self.get_credible_sets()
+    plt.scatter(np.arange(self.dims['N']), pips, c='k')
+
+    for k in cs.keys():
+        if purities[k] > thresh:
+            plt.scatter(np.arange(self.dims['N'])[cs[k]], pips[cs[k]], marker='o', s=200, alpha=0.5)
+    #plt.scatter(np.arange(self.dims['N'])[causal1], pips[causal1], c='r', marker='*')
+    #plt.scatter(np.arange(self.dims['N'])[causal2], pips[causal2], c='y', marker='*')
+
+
+    plt.xlabel('SNP')
+    plt.ylabel('PIP')
+
+    if save_path is not None:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+    plt.close()
+
 def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
     if snps is None:
         snps = []
     active = self.active.max(0) > thresh
-    for k in np.arange(self.K)[active]:
-        cset_size = (np.cumsum(np.flip(np.sort(self.pi[:, k]))) < alpha).sum() + 1
-        cset = np.flip(np.argsort(self.pi[:, k])[-cset_size:])
-        snps.append(cset)
+    credible_sets, purity = self.get_credible_sets(alpha=alpha)
+    for k in np.arange(self.dims['K'])[active]:
+        if purity[k] > thresh:
+            cset = credible_sets[k]
+            snps.append(cset)
 
     sizes = np.array([x.size for x in snps])
-
     snps = np.concatenate(snps)
+    
     fig, ax = plt.subplots(1, figsize=(6, 5))
     sns.heatmap(self.X[snps][:, snps],
         cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True,
@@ -90,20 +112,20 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
     """
     plot inducing point posteriors, weight means, and probabilities
     """
-    if self.weights.ndim == 2:
-        weights = self.weights * self.active
+    if self.weight_means.ndim == 2:
+        weights = self.weight_means * self.active
     else:
-        weights = np.einsum('ijk,kj->ij', self.weights, self.pi)
+        weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
     # make plot
     active_components = self.active.max(0) > thresh
     if np.all(~active_components):
         active_components[:3] = True
 
     fig, ax = plt.subplots(1, 3, figsize=(18, 4))
-    for k in np.arange(self.K)[active_components]:
-        if (self.pi[:, k] > 2/self.N).sum() > 0:
-            ax[2].scatter(np.arange(self.N)[self.pi[:, k] > 2/self.N], self.pi[:, k][self.pi[:, k] > 2/self.N], alpha=0.5, label='k{}'.format(k))
-    ax[2].scatter(np.arange(self.N), np.zeros(self.N), alpha=0.0)
+    for k in np.arange(self.dims['K'])[active_components]:
+        if (self.pi.T[:, k] > 2/self.dims['N']).sum() > 0:
+            ax[2].scatter(np.arange(self.dims['N'])[self.pi.T[:, k] > 2/self.dims['N']], self.pi.T[:, k][self.pi.T[:, k] > 2/self.dims['N']], alpha=0.5, label='k{}'.format(k))
+    ax[2].scatter(np.arange(self.dims['N']), np.zeros(self.dims['N']), alpha=0.0)
     ax[2].set_title('pi')
     ax[2].set_xlabel('SNP')
     ax[2].set_ylabel('probability')
@@ -129,15 +151,15 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
 
 def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=None, show=True):
     if tissues is None:
-        tissues = np.arange(self.T)
+        tissues = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
 
     if components is None:
-        components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+        components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
-    W = self.active * self.weights
-    c = (self.X @ self.pi)
+    W = self.active * self.weight_means
+    c = (self.X @ self.pi.T)
 
     pred = self._compute_prediction()
     logp = -norm.logcdf(-np.abs(pred)) - np.log(2)
@@ -187,12 +209,12 @@ def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=Non
 
 def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, save_path=None):
     if tissues is None:
-        tissues = np.arange(self.T)
+        tissues = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
 
     if components is None:
-        components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+        components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
     if width is None:
         width = int(np.sqrt(tissues.size)) + 1
@@ -200,12 +222,12 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
     else:
         height = int(tissues.size / width) + 1
 
-    pred = ((self.active * self.weights) @ (self.X @ self.pi).T)
+    pred = ((self.active * self.weight_means) @ (self.X @ self.pi.T).T)
     logp = - norm.logcdf(-np.abs(pred)) - np.log(2)
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
-    W = self.active * self.weights
-    c = (self.X @ self.pi)
+    W = self.active * self.weight_means
+    c = (self.X @ self.pi.T)
 
     pred = self._compute_prediction()
     fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
@@ -232,16 +254,18 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
 
 def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None, show=True):
     if tissues is None:
-        tissues = np.arange(self.T)
+        tissues = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
 
     if components is None:
-        components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+        components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
     pred = self._compute_prediction()
     logp = -np.log(norm.cdf(-np.abs(pred))*2)
-    pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
+    
+    #pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
+    pos = np.arange(self.snp_ids.size)
 
     pred = self._compute_prediction()
     fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
@@ -250,7 +274,6 @@ def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None,
         llim = []
         ax[0, i].set_title('{}\nzscores'.format(self.tissue_ids[t]))
         ax[1, i].set_title('components')
-
         ax[0, i].scatter(pos, pred[t], marker='x', c='k', alpha=0.5)
         ulim.append(pred[t].max())
         llim.append(pred[t].min())
@@ -281,12 +304,12 @@ def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None,
 
 def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, save_path=None):
     if tissues is None:
-        tissues = np.arange(self.T)
+        tissues = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
 
     if components is None:
-        components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+        components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
     if width is None:
         width = int(np.sqrt(tissues.size)) + 1
@@ -298,8 +321,8 @@ def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, sa
     logp = -np.log(norm.cdf(-np.abs(pred))*2)
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
-    W = self.active * self.weights
-    c = (self.X @ self.pi)
+    W = self.active * self.weight_means
+    c = (self.X @ self.pi.T)
 
     pred = W @ c.T
     fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
@@ -328,14 +351,14 @@ def plot_residual_zscores(self, tissues=None, components=None, save_path=None):
     plot residual of tissue t with components removed
     """
     if tissues is None:
-        tissues = np.arange(self.T)
+        tissues = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
 
     if components is None:
-        components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+        components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
-    W = self.active * self.weights
+    W = self.active * self.weight_means
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
     fig, ax = plt.subplots(components.size, tissues.size, figsize=(tissues.size*4, components.size*3), sharey=False)
@@ -370,14 +393,14 @@ def plot_residual_manhattan(self, tissues=None, components=None, save_path=None)
     plot residual of tissue t with components removed
     """
     if tissues is None:
-        tissues = np.arange(self.T)
+        tissues = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.T)[np.isin(self.tissue_ids, tissues)]
+        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
 
     if components is None:
-        components = np.arange(self.K)[np.any((self.active > 0.5), 0)]
+        components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
-    W = self.active * self.weights
+    W = self.active * self.weight_means
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
     logp = -norm.logcdf(-np.abs(self.Y)) - np.log(2)
 
@@ -418,10 +441,10 @@ def plot_predictions(self, save_path=None, show=True):
     plot predictions against observed z scores
     """
     pred = self._compute_prediction()
-    fig, ax = plt.subplots(2, self.T, figsize=(4*self.T, 6), sharey=True)
-    for t in range(self.T):
-        ax[0, t].scatter(np.arange(self.N), self.Y[t], marker='x', c='k', alpha=0.5)
-        ax[0, t].scatter(np.arange(self.N), pred[t], marker='o', c='r', alpha=0.5)
+    fig, ax = plt.subplots(2, self.dims['T'], figsize=(4*self.dims['T'], 6), sharey=True)
+    for t in range(self.dims['T']):
+        ax[0, t].scatter(np.arange(self.dims['N']), self.Y[t], marker='x', c='k', alpha=0.5)
+        ax[0, t].scatter(np.arange(self.dims['N']), pred[t], marker='o', c='r', alpha=0.5)
         ax[0, t].set_xlabel('SNP')
 
         ax[1, t].scatter(pred[t], self.Y[t], marker='x', c='k', alpha=0.5)
@@ -445,14 +468,14 @@ def plot_manhattan(self, component, thresh=0.0, save_path=None):
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
     #sorted_tissues = np.flip(np.argsort(self.active[:, component]))
     #active_tissues = sorted_tissues[self.active[sorted_tissues, component] > thresh]
-    active_tissues = np.arange(self.T)[self.active[:, component] > thresh]
+    active_tissues = np.arange(self.dims['T'])[self.active[:, component] > thresh]
     fig, ax = plt.subplots(1, active_tissues.size, figsize=(5*active_tissues.size, 4), sharey=True)
     for i, tissue in enumerate(active_tissues):
-        lead_snp = self.pi[:, component].argmax()
+        lead_snp = self.pi.T[:, component].argmax()
         r2 = self.X[lead_snp]**2
         ax[i].scatter(pos, logp[tissue], c=r2, cmap='RdBu_r')
         ax[i].set_title('Tissue: {}\nLead SNP {}\nweight= {:.2f}, p={:.2f}'.format(
-            self.tissue_ids[tissue], lead_snp, self.weights[tissue, component],self.active[tissue, component]))
+            self.tissue_ids[tissue], lead_snp, self.weight_means[tissue, component],self.active[tissue, component]))
         ax[i].set_xlabel('SNP')
 
     ax[0].set_ylabel('-log(p)')
@@ -485,7 +508,7 @@ def plot_component_colocalizations(self, save_path=None, show=True):
 
     component_colocalization = self.get_component_coloc()
     fig, ax = plt.subplots(1, active_components.sum(), figsize=(6 * active_components.sum(), 6))
-    for i, k in enumerate(np.arange(self.K)[active_components]):
+    for i, k in enumerate(np.arange(self.dims['K'])[active_components]):
         if i == 0:
             yticklabels = self.tissue_ids
         else:

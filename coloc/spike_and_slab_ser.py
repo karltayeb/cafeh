@@ -8,11 +8,11 @@ from .kls import unit_normal_kl, normal_kl, categorical_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
 
-class SpikeSlabSER:
-    from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores
-    from .model_queries import get_credible_sets
+class SimpleMVNFactorSER:
+    from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
+    from .model_queries import get_credible_sets, get_pip
 
-    def __init__(self, X, Y, K, snp_ids, tissue_ids, prior_activity, prior_variance, tolerance=1e-6, **kwargs):
+    def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-6):
         """
         X [N x N] covariance matrix
             if X is [T x N x N] use seperate embedding for each tissue
@@ -21,27 +21,24 @@ class SpikeSlabSER:
 
         self.X = X
         self.Y = Y
-        self.K = K
-        self.T = Y.shape[0]
-        self.N = Y.shape[1]
 
-        self.prior_activity = prior_activity
-        self.prior_variance = prior_variance * np.ones((self.T, self.K))
+        T, N = Y.shape
+        self.dims = {'N': N, 'T': T, 'K': K}
 
-        self.snp_ids = snp_ids
-        self.tissue_ids = tissue_ids
+        # priors
+        self.prior_variance = np.ones((T, K)) * prior_variance
+        self.prior_activity = np.ones(K) * prior_activity
+        self.prior_pi = prior_pi or np.ones(N) / N
+
+        # ids
+        self.tissue_ids = tissue_ids or np.arange(T)
+        self.snp_ids = snp_ids or np.arange(N)
 
         # initialize variational parameters
-        pi = np.random.random((self.N, self.K)) + 1
-        pi = pi / pi.sum(0)
-
-        self.pi = pi
-        self.global_sign = np.ones(self.N)
-
-        self.weights = np.random.random((self.T, self.K)) * 5
-        #self.weights = np.ones((self.T, self.K))
-        self.active = np.ones((self.T, self.K))
-        #self.active = np.random.random((self.T, self.K))
+        self.pi = np.ones((K, N)) / N
+        self.weight_means = np.zeros((T, K))
+        self.weight_vars = np.ones((T, K))
+        self.active = np.ones((T, K))
 
         self.elbos = []
         self.tolerance = tolerance
@@ -49,34 +46,13 @@ class SpikeSlabSER:
     ################################
     # UPDATE AND FITTING FUNCTIONS #
     ################################
-    def _flip(self, k, thresh=0.9):
-        """
-        flip snps and zscores to avoid having two blocks of negatively correlated snps
-        k is the component to operate on
-        thresh controls how far from the lead snp of the component to flip signs on
-
-        the model keeps a global record of whats changed
-        """
-        sign = np.ones(self.N)
-        lead_snp = self.pi[:, k].argmax()
-        switch = (self.X[lead_snp] < 0) & (np.abs(self.X[lead_snp]) > thresh)
-        sign[switch] *= -1
-
-        # update data and ld matrices to relfect this change in sign
-        self.Y = (self.Y * sign).astype(np.float64)
-        if self.X.ndim == 2:
-            self.X = self.X * np.outer(sign, sign).astype(np.float64)
-        else:
-            self.X = self.X * np.outer(sign, sign).astype(np.float64)[None]
-        self.global_sign = self.global_sign * sign
-
     def _diffuse_pi(self, width, components=None, bizarro=False):
         """
         spread mass of pi around snps in high ld
         cutoff is width for edges to include in graph diffusion
         """
         if components is None:
-            components = np.arange(self.K)
+            components = np.arange(self.dims['K'])
         if width < 1.0:
             X = self.X
             if bizarro:
@@ -86,7 +62,7 @@ class SpikeSlabSER:
             transition = X * (X >= width).astype(np.float64)
             inv_degree = np.diag(1 / (transition.sum(1)))
             transition = inv_degree @ transition
-            self.pi[:, components] = (transition.T @ self.pi)[:, components]
+            self.pi.T[:, components] = (transition.T @ self.pi.T)[:, components]
 
     def _compute_residual(self, k=None):
         """
@@ -98,25 +74,39 @@ class SpikeSlabSER:
         return residual
 
     def _compute_prediction(self, k=None):
-        W = self.weights * self.active
+        W = self.weight_means * self.active
         if self.X.ndim == 2:
-            prediction = W @ (self.X @ self.pi).T
+            prediction = W @ (self.X @ self.pi.T).T
             if k is not None:
-                prediction -= W[:, k][:, None] * (self.X @ self.pi[:, k])[None]
+                prediction -= W[:, k][:, None] * (self.X @ self.pi.T[:, k])[None]
         if self.X.ndim == 3:
-            prediction = np.stack([W[t] @ (self.X[t] @ self.pi).T for t in range(self.T)])
+            prediction = np.stack([W[t] @ (self.X[t] @ self.pi.T).T for t in range(self.dims['T'])])
             if k is not None:
                 prediction -= np.stack(
-                    [W[t, k] * (self.X[t] @ self.pi[:, k]) for t in range(self.T)]
+                    [W[t, k] * (self.X[t] @ self.pi.T[:, k]) for t in range(self.dims['T'])]
                 )
         return prediction
 
     def _compute_weight_var(self):
-        weight_var = self.prior_variance #* self.active
-        weight_var = weight_var / (1 + weight_var)
-        return weight_var
+        self.weight_vars = self.prior_variance #* self.active
+        self.weight_vars = self.weight_vars / (1 + self.weight_vars)
+        return self.weight_vars
 
-    def update_weights(self, components=None):
+    def _update_weight_component(self, k, ARD=False):
+        if ARD:
+            self.prior_variance[:, k] = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) * self.active[:, k]
+
+        # get expected weights
+        W = self.weight_means * self.active
+
+        # compute residual
+        r_k = self._compute_residual(k)
+
+        # update p(w | s = 1)
+        self.weight_vars[:, k] = self.prior_variance[:, k] / (1 + self.prior_variance[:, k])
+        self.weight_means[:, k] = self.weight_vars[:, k] * (r_k @ self.pi.T[:, k])
+
+    def update_weights(self, components=None, ARD=False):
         """
         X is LD/Covariance Matrix
         Y is T x N
@@ -125,27 +115,26 @@ class SpikeSlabSER:
         prior_activitiy
         """
         if components is None:
-            components = np.arange(self.K)
-
-        old_weights = self.weights.copy()
-        weight_var = self._compute_weight_var()
+            components = np.arange(self.dims['K'])
 
         for k in components:
             # get expected weights
-            W = self.weights * self.active
+            self._update_weight_component(k, ARD)
 
-            # compute residual
-            #residual = self.Y - W @ (self.X @ self.pi).T
-            # remove effect of kth component from residual
-            #r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
-            r_k = self._compute_residual(k)
-            # update p(w | s = 1)
-            self.weights[:, k] = weight_var[:, k] * (r_k @ self.pi[:, k])
+    def _update_active_component(self, k, ARD=False):
+        if ARD:
+            pass
 
-        weight_diff = np.abs(old_weights - self.weights).max()
-        return weight_diff
+        r_k = self._compute_residual(k)
+        for t in range(self.dims['T']):
+            off = np.log(1 - self.prior_activity[k])
+            on = r_k[t] @ self.pi.T[:, k] * self.weight_means[t, k] - 0.5 * (self.weight_means[t, k]**2 + self.weight_vars[t, k]) \
+                - normal_kl(self.weight_means[t, k], self.weight_vars[t, k], 0, self.prior_variance[t, k]) \
+                + np.log(self.prior_activity[k])
 
-    def update_active(self, components=None):
+            self.active[t, k] = 1 / (1 + np.exp(-(on - off)))
+
+    def update_active(self, components=None, ARD=False):
         """
         X is LD/Covariance Matrix
         Y is T x N
@@ -154,57 +143,34 @@ class SpikeSlabSER:
         prior_activitiy
         """
         if components is None:
-            components = np.arange(self.K)
+            components = np.arange(self.dims['K'])
 
-        old_active = self.active.copy()
-        weight_var = self._compute_weight_var()
         for k in components:
-            r_k = self._compute_residual(k)
-            for t in range(self.T):
-                off = np.log(1 - self.prior_activity[k])
-                on = r_k[t] @ self.pi[:, k] * self.weights[t, k] - 0.5 * (self.weights[t, k]**2 + weight_var[t, k]) \
-                    - normal_kl(self.weights[t, k], weight_var[t, k], 0, self.prior_variance[t, k]) \
-                    + np.log(self.prior_activity[k])
+            self._update_active_component(k, ARD)
 
-                self.active[t, k] = 1 / (1 + np.exp(-(on - off)))
-        active_diff = np.abs(old_active - self.active).max()
-        return active_diff
+    def _update_pi_component(self, k):
+        # compute residual
+        r_k = self._compute_residual(k)
+        W = self.active * self.weight_means
+
+        # r_k^T @ Sigma_inv @ (Sigma @ pi) @ (weights * beta)
+        pi_k = r_k * W[:, k][:, None]
+        pi_k = pi_k.sum(0)
+
+        # normalize to probabilities
+        pi_k = np.exp(pi_k - pi_k.max() + 5)
+        pi_k = pi_k / pi_k.sum()
+        self.pi.T[:, k] = pi_k
 
     def update_pi(self, components=None):
         """
         update pi
         """
         if components is None:
-            components = np.arange(self.K)
+            components = np.arange(self.dims['K'])
 
-        old_pi = self.pi.copy()
-        W = self.weights * self.active
-
-        active_components = (self.active.max(0) > 1e-2)
-
-        for k in components[active_components[components]]:
-            # compute residual
-            #residual = self.Y - W @ (self.X @ self.pi).T
-
-            # remove effect of kth component from residual
-            #r_k = residual + (W[:, k])[:, None] * (self.X @ self.pi[:, k])[None]
-            r_k = self._compute_residual(k)
-
-            # r_k^T @ Sigma_inv @ (Sigma @ pi) @ (weights * beta)
-            pi_k = r_k * W[:, k][:, None]
-            pi_k = pi_k.sum(0)
-
-            # normalize to probabilities
-            pi_k = np.exp(pi_k - pi_k.max() + 5)
-            pi_k = pi_k / pi_k.sum()
-            self.pi[:, k] = pi_k
-
-        # component not active-- back to prior
-        for k in components[~active_components[components]]:
-            self.pi[:, k] = np.ones(self.N) / self.N
-
-        pi_diff = np.abs(self.pi - old_pi).max()
-        return pi_diff
+        for k in components:
+            self._update_pi_component(k)
 
     def update_prior_activity(self, components=None):
         """
@@ -217,28 +183,28 @@ class SpikeSlabSER:
         EB for prior variances-- this is crucial to getting sensible credible intervals at end
         """
         if components is None:
-            components = np.arange(self.K)
+            components = np.arange(self.dims['K'])
 
-        new_variances = np.zeros((self.T, components.size))
+        new_variances = np.zeros((self.dims['T'], components.size))
         
         """
-        r = np.array([self._compute_residual(k=k) for k in range(self.K)])  # K x T x N
-        for t in range(self.T):
+        r = np.array([self._compute_residual(k=k) for k in range(self.dims['K'])])  # K x T x N
+        for t in range(self.dims['T']):
             for i, k in enumerate(components):
-                bf = lambda x: -np.power(x**2 + 1, -0.5) * np.sum(np.exp(np.power(r[k, t]**2 / 2 * x**2 / (1 + x**2), self.pi[:, k])))
+                bf = lambda x: -np.power(x**2 + 1, -0.5) * np.sum(np.exp(np.power(r[k, t]**2 / 2 * x**2 / (1 + x**2), self.pi.T[:, k])))
                 new_variances[t, i] = minimize_scalar(bf).x ** 2
         """
-        for t in range(self.T):
+        for t in range(self.dims['T']):
             for i, k in enumerate(components):
-                weight_var = self._compute_weight_var()
-                weight = self.weights[t, k]
-                f = lambda x: normal_kl(weight, weight_var, 0, x**2)
+                self.weight_vars = self._compute_weight_var()
+                weight = self.weight_means[t, k]
+                f = lambda x: normal_kl(weight, self.weight_vars, 0, x**2)
                 new_variances[t, i] = minimize_scalar(f).x ** 2
         
         """
 
-        z = np.array([self._compute_residual(k=k) @ self.pi[:, k] for k in range(self.K)]).T
-        for t in range(self.T):
+        z = np.array([self._compute_residual(k=k) @ self.pi.T[:, k] for k in range(self.dims['K'])]).T
+        for t in range(self.dims['T']):
             for i, k in enumerate(components):
                 log_bf = lambda x: -1 *(-0.5 * np.log(x**2 + 1) + (z[t, k] ** 2) / 2 * (x**2 / (1 + x**2)))
                 new_variances[t, i] = minimize_scalar(log_bf).x ** 2
@@ -248,216 +214,65 @@ class SpikeSlabSER:
         #self.prior_variance = temp.sum() / temp.size
 
 
-    def _fit(self, max_outer_iter=1000, max_inner_iter=1, bound=False, verbose=False, components=None, diffuse=1.0, update_weights=True, update_active=True, update_pi=True, update_prior_variance=False, update_prior_activity=False):
+    def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
         """
         loop through updates until convergence
         """
+        if components is None:
+            components = np.arange(self.dims['K'])
+
         self.elbos.append(self.compute_elbo())
-        for i in range(max_outer_iter):
-            # update weights and activities
-            for _ in range(max_inner_iter):
-                if update_prior_variance:
-                    self.update_prior_variance(components)
-
+        for i in range(max_iter):
+            for l in components:
                 if update_weights:
-                    diff1 = self.update_weights(components)
-                else:
-                    diff1 = 0.0
-
-                if update_active:
-                    diff2 = self.update_active(components)
-                else:
-                    diff2 = 0.0
-
-                if diff1 < self.tolerance and diff2 < self.tolerance:
-                    break
-            self.elbos.append(self.compute_elbo())
-
-            # update pi
-            for _ in range(max_inner_iter):
-
+                    self._update_weight_component(l, ARD=ARD_weights)        
+                
                 if update_pi:
-                    diff3 = self.update_pi()
-                else:
-                    diff3 = 0
+                    self._update_pi_component(l)
+                
+                if update_active:
+                    self._update_active_component(l, ARD=ARD_active)
 
-                if diff3 < self.tolerance:
-                    break
-            self._diffuse_pi(diffuse)
-
-
-            # after each inner loop record elbo
             self.elbos.append(self.compute_elbo())
 
-            # check for convergence in ELBO
-            if np.abs(self.elbos[-1] - self.elbos[-3]) < self.tolerance:
+            diff = self.elbos[-1] - self.elbos[-2]
+            if (np.abs(diff) < self.tolerance):
                 if verbose:
-                    print('ELBO converged at iter {}'.format(i))
+                    print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
                 break
 
-            # check for convergance in varitional parameters
-            elif diff1 < self.tolerance and diff2 < self.tolerance and diff3 < self.tolerance:
-                if verbose:
-                    print('Parameters converged at iter {}'.format(i))
-                break
-
-    def _forward_fit_step(self, l, max_inner_iter=1, max_outer_iter=1000,
-                          diffuse=1.0, quantile=0.0,
-                          bound=False, verbose=False, restarts=1, plots=False):
-        """
-        fit self as though there were only l components
-        T initializations with unit weight at each tissue, pick best solution among them
-        """
-        K = self.K
-        init_pi = self.pi.copy()
-        init_active = self.active.copy()
-        init_weights = self.weights.copy()
-
-        restart_dict = {}
-        elbos = []
-
-        # initialize pi based on residuals
-        residual = self._compute_residual()
-        sq_err = np.max(residual**2, axis=0)
-        pi = sq_err * (sq_err > np.quantile(sq_err, quantile))
-        pi = residual.mean(0)
-        pi = np.exp(pi - pi.max())
-        pi = pi / pi.sum()
-
-        self.pi[:, l-1] = pi
-        #self._diffuse_pi(0.1, components=np.arange(l-1, l))
-
-        if plots:
-            plt.scatter(np.arange(pi.size), self.pi[:, l-1])
-            plt.show()
-
-        # positive initialization
-        for i in range(restarts):
-            self.pi = init_pi
-            self.active = init_active
-            self.weights = init_weights
-
-            # initialize activity to random
-            active_t = init_active.copy()
-            active_t[:, l-1] = np.random.random(self.T)
-
-            # initialize weights something random
-            t = np.random.choice(self.T)
-            weights_t = init_weights.copy()
-            #weights_t[:, l-1] = np.random.normal(size=self.T)
-            #weights_t[:, l-1] = np.eye(self.T)[t]
-            weights_t[:, l-1] = np.zeros_like(self.T)
-
-            # initialize pi of the lth component, weigh snps with poor predictions heavier
-            pi_t = init_pi.copy()
-            pi_t[:, l-1] = pi
-
-            self.active = active_t
-            self.weights = weights_t
-            self.pi = pi_t
-
-            #self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-1, l), diffuse=diffuse)
-
-            # fit the whole model up to this component
-            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l-l, l), diffuse=diffuse)
-            self._fit(max_inner_iter, max_outer_iter, bound, verbose, components=np.arange(l), diffuse=diffuse)
-
-            restart_dict[i] = (self.pi.copy(), self.active.copy(), self.weights.copy())
-            elbos.append(self.compute_elbo())
-
-        select = np.argmax(elbos)
-        self.elbos.append(elbos[select])
-        new_pi, new_active, new_weights = restart_dict[select]
-
-        self.pi = new_pi
-        self.active = new_active
-        self.weights = new_weights
-
-        return restart_dict, elbos
-
-    def forward_fit(self, early_stop=False, max_inner_iter=1, max_outer_iter=1000,
-                    diffuse=1.0, quantile=0.0, flip=False,
-                    bound=False, verbose=False, restarts=1, plots=False):
-        """
-        forward selection scheme for variational optimization
-        fit first l components with weights initialized to look at each tissue
-        select the best solution (by elbo) among tissue initialization
-
-        fit first l+1 components
-        """
-        self.weights = np.zeros_like(self.weights)
-        self.active = np.ones_like(self.active)
-
-        for l in range(1, self.K+1):
-            print('Forward fit, learning {} components'.format(l))
-            self._forward_fit_step(
-                l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
-                diffuse=diffuse, quantile=quantile,
-                bound=bound, verbose=verbose, restarts=restarts, plots=plots)
-
-            # orient nearby snps and retrain component
-            """
-            if flip:
-                self._flip(k=l-1, thresh=0.9)
-                self._forward_fit_step(
-                    l, max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter,
-                    diffuse=diffuse, quantile=quantile,
-                    bound=bound, verbose=verbose, restarts=restarts, plots=plots)
-            """
-            if plots:
-                self.plot_components()
-
-            # if the next step turned off the component, all future steps will
-            # zero them out and do a final fit of the self
-            # if self.pi[:, l-1].max() < 0.01 and early_stop:
-            if early_stop and self.active[:, l-1].max() < 0.5:
-                print('learned inactive components')
-                # zero initialize the components
-                self.active[:, l:] = 1 - self.prior_activity[l:]
-                self.weights[:, l:] = 0
-                break
-
-        print('finalizing components')
-        #self._fit(max_inner_iter=max_inner_iter, max_outer_iter=max_outer_iter, bound=bound, diffuse=diffuse, verbose=verbose)
-        if plots:
-            self.plot_components()
-
-    def diffusion_fit(self, schedule):
-        for i, rate in enumerate(schedule):
-            self._fit(max_outer_iter=5, verbose=True)
-            transition = np.abs(self.X) * (np.abs(self.X) > rate)
-            degree = np.diag(1 / (transition.sum(1)))
-            transition = degree @ transition
-            self.pi = transition.T @ self.pi
+    def forward_fit(self, max_iter=1000, verbose=False, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
+        for k in range(self.dims['K']):
+            self.fit(max_iter, verbose, np.arange(k), update_weights, update_active, update_pi, ARD_weights, ARD_active)
 
     def compute_elbo(self, active=None):
         bound = 0 
-        W = self.weights * self.active
-        weight_var = self._compute_weight_var()
+        W = self.weight_means * self.active
+        self.weight_vars = self._compute_weight_var()
 
         if active is None:
             active = self.active
 
         if self.X.ndim == 2:
-            Kzz = self.pi.T @ self.X @ self.pi
-            Kzz = Kzz + np.diag(np.ones(self.K) - np.diag(Kzz))
+            Kzz = self.pi.T.T @ self.X @ self.pi.T
+            Kzz = Kzz + np.diag(np.ones(self.dims['K']) - np.diag(Kzz))
             self.X
-        for t in range(self.T):
+        for t in range(self.dims['T']):
             if self.X.ndim == 3:
-                Kzz = self.pi.T @ self.X[t] @ self.pi
-                Kzz = Kzz + np.diag(np.ones(self.K) - np.diag(Kzz))
-            bound += self.Y[t] @ (self.pi @ W[t])
+                Kzz = self.pi.T.T @ self.X[t] @ self.pi.T
+                Kzz = Kzz + np.diag(np.ones(self.dims['K']) - np.diag(Kzz))
+            bound += self.Y[t] @ (self.pi.T @ W[t])
             bound += -0.5 * W[t] @ Kzz @ W[t]
             bound += -0.5 * np.sum(
-                (self.weights[t]**2 + weight_var[t]) * active[t] - (self.weights[t] * active[t])**2
+                (self.weight_means[t]**2 + self.weight_vars[t]) * active[t] - (self.weight_means[t] * active[t])**2
             )
 
         KL = 0
-        for t in range(self.T):
-            for k in range(self.K):
+        for t in range(self.dims['T']):
+            for k in range(self.dims['K']):
 
                 # KL (q(w|s) || p(w | s))
-                KL += normal_kl(self.weights[t, k], weight_var[t, k], 0, self.prior_variance[t, k]) * active[t, k]
+                KL += normal_kl(self.weight_means[t, k], self.weight_vars[t, k], 0, self.prior_variance[t, k]) * active[t, k]
                 KL += normal_kl(0, self.prior_variance[t, k], 0, self.prior_variance[t, k]) * (1 - active[t, k])
 
                 # KL (q(s) || p(s))
@@ -466,9 +281,9 @@ class SpikeSlabSER:
                     np.array([self.prior_activity[k], 1 - self.prior_activity[k]])
                 )
 
-        for k in range(self.K):
+        for k in range(self.dims['K']):
             # KL (q(z) || p (z))
-            KL += categorical_kl(self.pi[:, k], np.ones(self.N) / self.N)
+            KL += categorical_kl(self.pi.T[:, k], np.ones(self.dims['N']) / self.dims['N'])
         bound -= KL
         return bound 
 
@@ -476,10 +291,10 @@ class SpikeSlabSER:
         """
         reorder components so that components with largest weights come first
         """
-        order = np.flip(np.argsort(np.abs(self.weights).max(0)))
-        self.weights = self.weights[:, order]
+        order = np.flip(np.argsort(np.abs(self.weight_means).max(0)))
+        self.weight_means = self.weight_means[:, order]
         self.active = self.active[:, order]
-        self.pi = self.pi[:, order]
+        self.pi.T = self.pi.T[:, order]
 
     def save(self, output_dir, model_name):
         if not os.path.isdir(output_dir):
