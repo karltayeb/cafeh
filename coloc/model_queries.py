@@ -28,7 +28,11 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
 
     purities = {}
     for key, value in credible_sets.items():
-        ld = np.atleast_2d(np.corrcoef(self.X[value]))
+        idx = np.isin(self.snp_ids, value)
+        if self.x_is_ld:
+            ld = self.X[idx][:, idx]
+        else:
+            ld = np.atleast_2d(np.corrcoef(self.X[idx]))
         if ld.shape[0] == 1:
             purity = 1.0
         else:
@@ -36,6 +40,13 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
         purities[key] = purity
 
     return credible_sets, purities
+
+def get_expected_weights(self):
+    if self.weight_means.ndim == 2:
+        weights = self.weight_means * self.active
+    else:
+        weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
+    return weights
 
 def get_tissue_pip(self):
     """

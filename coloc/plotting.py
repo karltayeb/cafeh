@@ -83,20 +83,29 @@ def plot_pips(self, thresh=0.5, star=None, save_path=None, show=True):
     plt.close()
 
 def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
+    """
+    snps is an additional list of snps to plot
+    """
     if snps is None:
         snps = []
-    active = self.active.max(0) > thresh
+
     credible_sets, purity = self.get_credible_sets(alpha=alpha)
+
     for k in np.arange(self.dims['K'])[active]:
         if purity[k] > thresh:
             cset = credible_sets[k]
-            snps.append(cset)
+            snps.append(np.arange(self.dims['N'])[np.isin(self.snp_ids, cset)])
 
     sizes = np.array([x.size for x in snps])
     snps = np.concatenate(snps)
     
+    if self.x_is_ld:
+        ld = self.X[snps][:, snps]
+    else:
+        ld = np.atleast_2d(np.corrcoef(self.X[snps]))
+
     fig, ax = plt.subplots(1, figsize=(6, 5))
-    sns.heatmap(self.X[snps][:, snps],
+    sns.heatmap(ld,
         cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True,
         yticklabels=self.snp_ids[snps], xticklabels=[])
     ax.hlines(np.cumsum(sizes), *ax.get_xlim(), colors='w', lw=3)
@@ -112,10 +121,8 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
     """
     plot inducing point posteriors, weight means, and probabilities
     """
-    if self.weight_means.ndim == 2:
-        weights = self.weight_means * self.active
-    else:
-        weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
+    weights = self.get_expected_weights()
+    
     # make plot
     active_components = self.active.max(0) > thresh
     if np.all(~active_components):
@@ -274,12 +281,14 @@ def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None,
         llim = []
         ax[0, i].set_title('{}\nzscores'.format(self.tissue_ids[t]))
         ax[1, i].set_title('components')
-        ax[0, i].scatter(pos, pred[t], marker='x', c='k', alpha=0.5)
+
+        ax[0, i].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5)
+        ax[0, i].scatter(pos, pred[t], marker='o', c='r', alpha=0.5)
         ulim.append(pred[t].max())
         llim.append(pred[t].min())
 
         for k in components:
-            predk = self._compute_prediction()[t] - self._compute_prediction(k=k)[t]
+            predk = pred[t] - self._compute_prediction(k=k)[t]
             if i == 0:
                 ax[1, i].scatter(pos, predk, marker='o', alpha=self.active[t, k], label='k{}'.format(k))
             else:

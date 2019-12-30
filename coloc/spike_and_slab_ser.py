@@ -12,7 +12,7 @@ class SimpleMVNFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip
 
-    def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-6):
+    def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-3):
         """
         X [N x N] covariance matrix
             if X is [T x N x N] use seperate embedding for each tissue
@@ -28,11 +28,11 @@ class SimpleMVNFactorSER:
         # priors
         self.prior_variance = np.ones((T, K)) * prior_variance
         self.prior_activity = np.ones(K) * prior_activity
-        self.prior_pi = prior_pi or np.ones(N) / N
+        self.prior_pi = prior_pi if (prior_pi is not None) else np.ones(N) / N
 
         # ids
-        self.tissue_ids = tissue_ids or np.arange(T)
-        self.snp_ids = snp_ids or np.arange(N)
+        self.tissue_ids = tissue_ids if (tissue_ids is not None) else np.arange(T)
+        self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
 
         # initialize variational parameters
         self.pi = np.ones((K, N)) / N
@@ -42,6 +42,8 @@ class SimpleMVNFactorSER:
 
         self.elbos = []
         self.tolerance = tolerance
+
+        self.x_is_ld = True
 
     ################################
     # UPDATE AND FITTING FUNCTIONS #
@@ -92,7 +94,7 @@ class SimpleMVNFactorSER:
         self.weight_vars = self.weight_vars / (1 + self.weight_vars)
         return self.weight_vars
 
-    def _update_weight_component(self, k, ARD=False):
+    def _update_weight_component(self, k, precomputed_residual=None, ARD=False):
         if ARD:
             self.prior_variance[:, k] = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) * self.active[:, k]
 
@@ -100,7 +102,7 @@ class SimpleMVNFactorSER:
         W = self.weight_means * self.active
 
         # compute residual
-        r_k = self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
 
         # update p(w | s = 1)
         self.weight_vars[:, k] = self.prior_variance[:, k] / (1 + self.prior_variance[:, k])
@@ -121,13 +123,13 @@ class SimpleMVNFactorSER:
             # get expected weights
             self._update_weight_component(k, ARD)
 
-    def _update_active_component(self, k, ARD=False):
+    def _update_active_component(self, k, precomputed_residual=None, ARD=False):
         if ARD:
             pass
 
-        r_k = self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
         for t in range(self.dims['T']):
-            off = np.log(1 - self.prior_activity[k])
+            off = np.log(1 - self.prior_activity[k] + 1e-10)
             on = r_k[t] @ self.pi.T[:, k] * self.weight_means[t, k] - 0.5 * (self.weight_means[t, k]**2 + self.weight_vars[t, k]) \
                 - normal_kl(self.weight_means[t, k], self.weight_vars[t, k], 0, self.prior_variance[t, k]) \
                 + np.log(self.prior_activity[k])
@@ -148,9 +150,9 @@ class SimpleMVNFactorSER:
         for k in components:
             self._update_active_component(k, ARD)
 
-    def _update_pi_component(self, k):
+    def _update_pi_component(self, k, precomputed_residual=None):
         # compute residual
-        r_k = self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
         W = self.active * self.weight_means
 
         # r_k^T @ Sigma_inv @ (Sigma @ pi) @ (weights * beta)
@@ -224,22 +226,28 @@ class SimpleMVNFactorSER:
         self.elbos.append(self.compute_elbo())
         for i in range(max_iter):
             for l in components:
+                r_l = self._compute_residual(l)
+
                 if update_weights:
-                    self._update_weight_component(l, ARD=ARD_weights)        
+                    self._update_weight_component(l, precomputed_residual=r_l, ARD=ARD_weights)        
                 
                 if update_pi:
-                    self._update_pi_component(l)
+                    self._update_pi_component(l, precomputed_residual=r_l)
                 
                 if update_active:
-                    self._update_active_component(l, ARD=ARD_active)
+                    self._update_active_component(l, precomputed_residual=r_l, ARD=ARD_active)
 
             self.elbos.append(self.compute_elbo())
-
-            diff = self.elbos[-1] - self.elbos[-2]
-            if (np.abs(diff) < self.tolerance):
+            
+            if i % 5 == 0:
                 if verbose:
-                    print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
-                break
+                    print('Iter {}: {}'.format(i, self.elbos[-1]))
+
+                diff = self.elbos[-1] - self.elbos[-2]
+                if (np.abs(diff) < self.tolerance):
+                    if verbose:
+                        print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
+                    break
 
     def forward_fit(self, max_iter=1000, verbose=False, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
         for k in range(self.dims['K']):
@@ -293,8 +301,9 @@ class SimpleMVNFactorSER:
         """
         order = np.flip(np.argsort(np.abs(self.weight_means).max(0)))
         self.weight_means = self.weight_means[:, order]
+        self.weight_vars = self.weight_vars[:, order]
         self.active = self.active[:, order]
-        self.pi.T = self.pi.T[:, order]
+        self.pi = self.pi[order]
 
     def save(self, output_dir, model_name):
         if not os.path.isdir(output_dir):

@@ -3,12 +3,14 @@ from scipy.stats import norm
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
+import functools
+from .utils import np_cache, np_cache_class, pack, unpack
 
 class IndependentFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip
+    from .model_queries import get_credible_sets, get_pip, get_expected_weights
 
-    def __init__(self, X, Y, K, covariates=None, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-6):
+    def __init__(self, X, Y, K, covariates=None, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-3):
         """
         Y [T x M] expresion for tissue, individual
         X [N x M] genotype for snp, individual
@@ -58,6 +60,9 @@ class IndependentFactorSER:
 
         self.elbos = []
         self.tolerance = 1e-3
+        self.x_is_ld = False
+
+        self.moments = {'mu1': np.zeros((T, K, M)), 'mu2': np.ones((T, K, M))}
 
     def _compute_covariate_prediction(self, compute=True):
         """
@@ -72,7 +77,7 @@ class IndependentFactorSER:
                     self.cov_weights[tissue] @ self.covariates[tissue].values
         return prediction
 
-    def _compute_prediction(self, k=None, use_covariates=True):
+    def _compute_prediction_old(self, k=None, use_covariates=True):
         """
         compute expected prediction
         """
@@ -83,6 +88,19 @@ class IndependentFactorSER:
                 prediction[tissue] -= self.active[tissue, k] * (self.pi[k] * self.weight_means[tissue, k]) @ self.X
         return prediction
 
+
+    def _compute_prediction(self, k=None, use_covariates=True):
+        """
+        compute expected prediction
+        """
+        prediction = self._compute_covariate_prediction(use_covariates)
+        for tissue in range(self.dims['T']):
+            for component in range(self.dims['K']):
+                prediction[tissue] += self.compute_first_moment(component, tissue)
+            if k is not None:
+                prediction[tissue] -= self.compute_first_moment(k, tissue)
+        return prediction
+
     def _compute_residual(self, k=None, use_covariates=True):
         """
         computes expected residual
@@ -90,18 +108,81 @@ class IndependentFactorSER:
         prediction = self._compute_prediction(k, use_covariates)
         return self.Y - prediction
 
+    @functools.lru_cache()
+    def _get_mask(self, tissue):
+        return ~np.isnan(self.Y[tissue])
+
+    @functools.lru_cache()
+    def _get_diag(self, tissue):
+        mask = self._get_mask(tissue)
+        return np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
+
+
+    @np_cache_class()
+    def _compute_first_moment(self, pi, weight, active):
+        """
+        mask = ~np.isnan(self.Y[tissue])
+        pi = self.pi[component]
+        weight = self.weight_means[tissue, component]
+        var = self.weight_vars[tissue, component]
+        active = self.active[tissue, component]
+        X = self.X[:, mask]
+        """
+        # pi, weight, var, active, X = unpack(flat, sizes, shapes)
+        return (pi * weight * active) @ self.X
+
+    def compute_first_moment(self, component, tissue):
+        pi = self.pi[component]
+        weight = self.weight_means[tissue, component]
+        var = self.weight_vars[tissue, component]
+        active = self.active[tissue, component]
+        return self._compute_first_moment(pi, weight, active)
+
+    @np_cache_class()
+    def _compute_second_moment(self, pi, weight, var, active):
+        """
+        mask = ~np.isnan(self.Y[tissue])
+        pi = self.pi[component]
+        weight = self.weight_means[tissue, component]
+        var = self.weight_vars[tissue, component]
+        active = self.active[tissue, component]
+        X = self.X[:, mask]
+        """
+        # pi, weight, var, active, X = unpack(flat, sizes, shapes)
+        return (pi * (weight**2 + var) * active) @ self.X**2
+
+    def compute_second_moment(self, component, tissue):
+        pi = self.pi[component]
+        weight = self.weight_means[tissue, component]
+        var = self.weight_vars[tissue, component]
+        active = self.active[tissue, component]
+        return self._compute_second_moment(pi, weight, var, active)
+
     def _compute_moments(self, tissue, component):
         """
         first and second moment of tissue, component prediction
         E[(x^T z w s)], E[(x^T z w s)^2]
         """
-        mask = ~np.isnan(self.Y[tissue])
-        mu2 = (self.pi[component]
-               * (self.weight_means[tissue, component]**2 + self.weight_vars[tissue, component])
-               * self.active[tissue, component]) @ (self.X[:, mask]**2)
-        mu = (self.pi[component]
-              * self.weight_means[tissue, component]
-              * self.active[tissue, component]) @ self.X[:, mask]
+        mask = self._get_mask(tissue) # .astype(np.float64)
+        """
+        flat, sizes, shapes = pack(
+            self.pi[component],
+            self.weight_means[tissue, component],
+            self.weight_vars[tissue, component],
+            self.active[tissue, component],
+            self.X[:, mask]
+        )
+        """
+
+        pi = self.pi[component]
+        weight = self.weight_means[tissue, component]
+        var = self.weight_vars[tissue, component]
+        active = self.active[tissue, component]
+
+        #mu = _compute_first_moment(flat, sizes, shapes)
+        #mu2 = _compute_second_moment(flat, sizes, shapes)
+        mu = self._compute_first_moment(pi, weight, active)
+        mu2 = self._compute_second_moment(pi, weight, active, var)
         return mu, mu2
 
     def _update_covariate_weights_tissue(self, residual, tissue):
@@ -119,8 +200,8 @@ class IndependentFactorSER:
         r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
         pi_k = np.zeros(self.dims['N'])
         for tissue in range(self.dims['T']):
-            mask = ~np.isnan(self.Y[tissue])
-            diag = np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
+            mask = self._get_mask(tissue)
+            diag = self._get_diag(tissue)
             tmp1 = (-0.5 / self.tissue_variance[tissue] * (r_k[tissue, mask][None] - self.weight_means[tissue, k][:, None] * self.X[:, mask]) ** 2).sum(1)
             tmp2 = -0.5 * (1 / self.tissue_variance[tissue]) * (self.weight_vars[tissue, k]) * diag
             tmp3 = -1 * normal_kl(self.weight_means[tissue, k], self.weight_vars[tissue, k], 0.0, self.prior_variance[tissue, k])
@@ -142,8 +223,8 @@ class IndependentFactorSER:
                 self.prior_variance[tissue, k] = np.inner(
                     (self.weight_vars[tissue, k] + self.weight_means[tissue, k]**2), self.pi[k]) * self.active[tissue, k]
 
-            mask = ~np.isnan(self.Y[tissue])
-            diag = np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
+            mask = self._get_mask(tissue)
+            diag = self._get_diag(tissue)
 
             precision = (diag / self.tissue_variance[tissue]) + (1 / self.prior_variance[tissue, k])
             variance = 1 / precision
@@ -162,6 +243,7 @@ class IndependentFactorSER:
             self.prior_activity[k] = (a - 1) / (a + b - 2)
 
         r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
+        
         for tissue in range(self.dims['T']):
             mask = ~np.isnan(self.Y[tissue])
             off = np.sum(norm.logpdf(x=r_k[tissue, mask], loc=0.0, scale=np.sqrt(self.tissue_variance[tissue]))) \
@@ -223,7 +305,6 @@ class IndependentFactorSER:
         for k in components:
             self._update_active_component(k, ARD)
 
-
     def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_active=True, update_pi=True, update_variance=True, ARD_weights=False, ARD_active=False, update_covariate_weights=True):
         """
         loop through updates until convergence
@@ -246,22 +327,22 @@ class IndependentFactorSER:
                     self._update_pi_component(l, precomputed_residual=r_l)
                 if update_active:
                     self._update_active_component(l, ARD=ARD_active, precomputed_residual=r_l)
-            
-            # update variance parameters
-            r = self._compute_residual()
-            if update_variance:
-                self._update_tissue_variance(precomputed_residual=r)
 
+                # update variance parameters
+                r = self._compute_residual()
+                if update_variance:
+                    self._update_tissue_variance(precomputed_residual=r)
             # monitor convergence with ELBO
-            self.elbos.append(self.compute_elbo(precomputed_residual=r))
-            if verbose:
-                print("Iter {}: {}".format(i, self.elbos[-1]))
-
-            diff = self.elbos[-1] - self.elbos[-2]
-            if (np.abs(diff) < self.tolerance):
+            if i % 5 == 0:
+                self.elbos.append(self.compute_elbo(precomputed_residual=r))
                 if verbose:
-                    print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
-                break
+                    print("Iter {}: {}".format(i, self.elbos[-1]))
+
+                diff = self.elbos[-1] - self.elbos[-2]
+                if (np.abs(diff) < self.tolerance):
+                    if verbose:
+                        print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
+                    break
 
     def forward_fit(self, max_iter=1000, verbose=False, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
         for k in range(self.dims['K']):
@@ -302,3 +383,36 @@ class IndependentFactorSER:
         #TODO ADD lnp(prior_weight_variance) + lnp(prior_slab_weights)
 
         return expected_conditional - KL
+
+    def save(self, output_dir, model_name):
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        if output_dir[-1] == '/':
+            output_dir = output_dir[:-1]
+        pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
+
+@np_cache()
+def _compute_first_moment(pi, weight, active, X):
+    """
+    mask = ~np.isnan(self.Y[tissue])
+    pi = self.pi[component]
+    weight = self.weight_means[tissue, component]
+    var = self.weight_vars[tissue, component]
+    active = self.active[tissue, component]
+    X = self.X[:, mask]
+    """
+    # pi, weight, var, active, X = unpack(flat, sizes, shapes)
+    return (pi * weight * active) @ X
+
+@np_cache()
+def _compute_second_moment(pi, weight, var, active, X):
+    """
+    mask = ~np.isnan(self.Y[tissue])
+    pi = self.pi[component]
+    weight = self.weight_means[tissue, component]
+    var = self.weight_vars[tissue, component]
+    active = self.active[tissue, component]
+    X = self.X[:, mask]
+    """
+    pi, weight, var, active, X
+    return (pi * (weight**2 + var) * active) @ X**2

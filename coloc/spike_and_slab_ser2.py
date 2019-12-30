@@ -12,7 +12,7 @@ class MVNFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip
 
-    def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-6):
+    def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-3):
         """
         X [N x N] covariance matrix
             if X is [T x N x N] use seperate embedding for each tissue
@@ -32,11 +32,11 @@ class MVNFactorSER:
         # priors
         self.prior_variance = np.ones((T, K)) * prior_variance
         self.prior_activity = np.ones(K) * prior_activity
-        self.prior_pi = prior_pi or np.ones(N) / N
+        self.prior_pi = prior_pi if (prior_pi is not None) else np.ones(N) / N
 
         # ids
-        self.tissue_ids = tissue_ids or np.arange(T)
-        self.snp_ids = snp_ids or np.arange(N)
+        self.tissue_ids = tissue_ids if (tissue_ids is not None) else np.arange(T)
+        self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
 
         # initialize variational parameters
         self.pi = np.ones((K, N)) / N
@@ -46,6 +46,8 @@ class MVNFactorSER:
 
         self.elbos = []
         self.tolerance = tolerance
+
+        self.x_is_ld = True
 
     ################################
     # UPDATE AND FITTING FUNCTIONS #
@@ -109,8 +111,8 @@ class MVNFactorSER:
               * self.weight_means[tissue, component]) @ self.U
         return mu, mu2
 
-    def _update_weight_component(self, k, ARD=False):
-        r_k = self._compute_residual(k)
+    def _update_weight_component(self, k, precomputed_residual=None, ARD=False):
+        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
         for tissue in range(self.dims['T']):
             if ARD:
                 self.prior_variance[tissue, k] = np.inner(
@@ -151,12 +153,12 @@ class MVNFactorSER:
         on = tmp1 + tmp2 + tmp3 + np.log(self.prior_activity[component] + 1e-10)
         self.active[tissue, component] = 1 / (1 + np.exp(-(on - off)))
 
-    def _update_active_component(self, k, ARD=False):
+    def _update_active_component(self, k, precomputed_residual=None, ARD=False):
         if ARD:
             a = self.active[:, k].sum() + 1
             b = 1 - self.active[:, k].sum() + self.dims['T']
             self.prior_activity[k] = (a - 1) / (a + b - 2)
-        r_k = self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
         for t in range(self.dims['T']):
             self._update_active_component_tissue(r_k, t, k)
 
@@ -174,9 +176,9 @@ class MVNFactorSER:
         for k in components:
             self._update_active_component(k, ARD=ARD)
 
-    def _update_pi_component(self, k, ARD=False):
+    def _update_pi_component(self, k, precomputed_residual=None, ARD=False):
         # compute residual
-        r_k = self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
 
         pi_k = (r_k * self.weight_means[:, k]
                 - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k])
@@ -209,22 +211,25 @@ class MVNFactorSER:
         self.elbos.append(self.compute_elbo())
         for i in range(max_iter):
             for l in components:
+                r_l = self._compute_residual(l)
                 if update_weights:
-                    self._update_weight_component(l, ARD=ARD_weights)        
-                
+                    self._update_weight_component(l, precomputed_residual=r_l, ARD=ARD_weights)
                 if update_pi:
-                    self._update_pi_component(l)
-                
+                    self._update_pi_component(l, precomputed_residual=r_l)
                 if update_active:
-                    self._update_active_component(l, ARD=ARD_active)
+                    self._update_active_component(l, precomputed_residual=r_l, ARD=ARD_active)
 
             self.elbos.append(self.compute_elbo())
 
-            diff = self.elbos[-1] - self.elbos[-2]
-            if (np.abs(diff) < self.tolerance):
+            if i % 5 == 0:
                 if verbose:
-                    print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
-                break
+                    print('Iter {}: {}'.format(i, self.elbos[-1]))
+
+                diff = self.elbos[-1] - self.elbos[-2]
+                if (np.abs(diff) < self.tolerance):
+                    if verbose:
+                        print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
+                    break
 
     def forward_fit(self, max_iter=1000, verbose=False, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
         for k in range(self.dims['K']):
@@ -282,10 +287,12 @@ class MVNFactorSER:
         """
         reorder components so that components with largest weights come first
         """
-        order = np.flip(np.argsort(np.abs(self.weight_means).max(0)))
+        weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
+        order = np.flip(np.argsort(np.abs(weights).max(0)))
         self.weight_means = self.weight_means[:, order]
+        self.weight_vars = self.weight_vars[:, order]
         self.active = self.active[:, order]
-        self.pi.T = self.pi.T[:, order]
+        self.pi = self.pi[order]
 
     def save(self, output_dir, model_name):
         if not os.path.isdir(output_dir):
