@@ -91,7 +91,7 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
 
     credible_sets, purity = self.get_credible_sets(alpha=alpha)
 
-    for k in np.arange(self.dims['K'])[active]:
+    for k in np.arange(self.dims['K']):
         if purity[k] > thresh:
             cset = credible_sets[k]
             snps.append(np.arange(self.dims['N'])[np.isin(self.snp_ids, cset)])
@@ -103,7 +103,7 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
         ld = self.X[snps][:, snps]
     else:
         ld = np.atleast_2d(np.corrcoef(self.X[snps]))
-
+    ld = self.get_ld(snps)
     fig, ax = plt.subplots(1, figsize=(6, 5))
     sns.heatmap(ld,
         cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True,

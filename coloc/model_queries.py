@@ -27,12 +27,8 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
         credible_sets[k] = self.snp_ids[cset]
 
     purities = {}
-    for key, value in credible_sets.items():
-        idx = np.isin(self.snp_ids, value)
-        if self.x_is_ld:
-            ld = self.X[idx][:, idx]
-        else:
-            ld = np.atleast_2d(np.corrcoef(self.X[idx]))
+    for key, snps in credible_sets.items():
+        ld = self.get_ld(snps)
         if ld.shape[0] == 1:
             purity = 1.0
         else:
