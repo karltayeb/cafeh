@@ -7,6 +7,8 @@ import seaborn as sns
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
+from .utils import np_cache_class
+from functools import lru_cache
 
 class MVNFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
@@ -50,34 +52,29 @@ class MVNFactorSER:
     ################################
     # UPDATE AND FITTING FUNCTIONS #
     ################################
+    @np_cache_class(maxsize=2**5)
+    def _compute_first_moment(self, pi, weight, active):
+        return (pi * weight * active) @ self.X
 
-    def _diffuse_pi(self, width, components=None, bizarro=False):
-        """
-        spread mass of pi around snps in high ld
-        cutoff is width for edges to include in graph diffusion
-        """
-        if components is None:
-            components = np.arange(self.dims['K'])
-        if width < 1.0:
-            X = self.X
-            if bizarro:
-                X = np.abs(X)
-            if X.ndim == 3:
-                X = np.mean(X, axis=0)
-            transition = X * (X >= width).astype(np.float64)
-            inv_degree = np.diag(1 / (transition.sum(1)))
-            transition = inv_degree @ transition
-            self.pi.T[:, components] = (transition.T @ self.pi.T)[:, components]
-
-    def _compute_prediction_old(self, k=None):
-        prediction = np.zeros_like(self.Y)
-        if k is not None:
-            prediction -= (self.X @ self.pi.T[:, k][:, None] * (self.weight_means[:, k] * self.active[:, k][:, None]).T).T
-        for k in range(self.dims['K']):
-            prediction += (self.X @ self.pi.T[:, k][:, None] * (self.weight_means[:, k] * self.active[:, k][:, None]).T).T
-        return prediction
+    @np_cache_class()
+    def _compute_prediction_component(self, active, pi, weights):
+        return active[:, None] * (pi * weights) @ self.X
 
     def _compute_prediction(self, k=None):
+        prediction = np.zeros_like(self.Y)
+        for k in range(self.dims['K']):
+            active= self.active[:, k]
+            pi = self.pi[k]
+            weights = self.weight_means[:, k]
+            prediction += self._compute_prediction_component(active, pi, weights)
+        if k is not None:
+            active= self.active[:, k]
+            pi = self.pi[k]
+            weights = self.weight_means[:, k]
+            prediction -= self._compute_prediction_component(active, pi, weights)
+        return prediction
+
+    def _compute_prediction_old(self, k=None):
         """
         compute expected prediction
         """
@@ -97,6 +94,27 @@ class MVNFactorSER:
         residual = self.Y - prediction
         return residual
 
+    @np_cache_class(maxsize=2**5)
+    def _compute_first_moment(self, pi, weight, active):
+        return (pi * weight * active) @ self.U
+
+    def compute_first_moment(self, component):
+        pi = self.pi[component]
+        weight = self.weight_means[:, component]
+        active = self.active[:, component][:, None]
+        return self._compute_first_moment(pi, weight, active)
+
+    @np_cache_class(maxsize=2**5)
+    def _compute_second_moment(self, pi, weight, var, active):
+        return (pi * (weight**2 + var) * active) @ self.U**2
+
+    def compute_second_moment(self, component):
+        pi = self.pi[component]
+        weight = self.weight_means[:, component]
+        var = self.weight_vars[:, component]
+        active = self.active[:, component][:, None]
+        return self._compute_second_moment(pi, weight, var, active)
+
     def _compute_moments(self, tissue, component):
         """
         first and second moment of tissue, component prediction
@@ -111,19 +129,26 @@ class MVNFactorSER:
 
     def _update_weight_component(self, k, ARD=False):
         r_k = self._compute_residual(k)
-        for tissue in range(self.dims['T']):
-            if ARD:
-                self.prior_variance[tissue, k] = np.inner(
-                    (self.weight_vars[tissue, k] + self.weight_means[tissue, k]**2), self.pi[k]) \
-                * self.active[tissue, k]
+        if ARD: 
+            self.prior_variance[:, k] = \
+                (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k] * self.active[:, k]
 
+        """
+        precision = 1 + (1 / self.prior_variance[:, k])
+        variance = 1 / precision
+        mean = variance[:, None] * r_k
+        self.weight_vars[:, k] = variance[:, None] * np.ones(self.dims['N'])[None]
+        self.weight_means[:, k] = mean
+
+        """
+        for tissue in range(self.dims['T']):
             precision = 1 + (1 / self.prior_variance[tissue, k])
             variance = 1 / precision
             mean = r_k[tissue] * variance
 
             self.weight_vars[tissue, k] = variance * np.ones(self.dims['N'])
             self.weight_means[tissue, k] = mean
-
+        
 
     def update_weights(self, components=None, ARD=False):
         """
@@ -209,16 +234,12 @@ class MVNFactorSER:
         self.elbos.append(self.compute_elbo())
         for i in range(max_iter):
             for l in components:
-                if update_weights:
-                    self._update_weight_component(l, ARD=ARD_weights)        
-                
-                if update_pi:
-                    self._update_pi_component(l)
-                
-                if update_active:
-                    self._update_active_component(l, ARD=ARD_active)
+                if update_weights: self._update_weight_component(l, ARD=ARD_weights)        
+                if update_pi: self._update_pi_component(l)
+                if update_active: self._update_active_component(l, ARD=ARD_active)
 
             self.elbos.append(self.compute_elbo())
+            if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
 
             diff = self.elbos[-1] - self.elbos[-2]
             if (np.abs(diff) < self.tolerance):
@@ -258,11 +279,12 @@ class MVNFactorSER:
         for tissue in range(self.dims['T']):
             p = self.active[tissue] @ (self.pi * self.weight_means[tissue])
             expected_conditional += np.inner(self.Y[tissue], p)
-            expected_conditional += -0.5 * (p @ self.X @ p)
-            # add trace term
-            for component in range(self.dims['K']):
-                mu, mu2 = self._compute_moments(tissue, component)
-                expected_conditional += -0.5 * np.sum(mu2 - mu**2)
+
+            z = self.pi * self.weight_means[tissue]
+            z = z @ self.X @ z.T
+            z = z - np.diag(np.diag(z))
+            expected_conditional += -0.5 * z.sum()
+            expected_conditional += -0.5 * ((self.weight_means[tissue] ** 2 + self.weight_vars[tissue]) * self.pi).sum()
 
         # KL(q(W | S) || p(W)) = KL(q(W | S = 1) || p(W)) q(S = 1) + KL(p(W) || p(W)) (1 - q(S = 1))
         KL += np.sum(
@@ -274,9 +296,73 @@ class MVNFactorSER:
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
-
         # TODO ADD lnp(prior_weight_variance) + lnp(prior_slab_weights)
         return expected_conditional - KL
+
+    def _a(self):
+        expected_conditional = 0
+        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        for tissue in range(self.dims['T']):
+            p = self.active[tissue] @ (self.pi * self.weight_means[tissue])
+            expected_conditional += np.inner(self.Y[tissue], p)
+
+            z = self.pi * self.weight_means[tissue]
+            z = z @ self.X @ z.T
+            z = z - np.diag(np.diag(z))
+            expected_conditional += -0.5 * z.sum()
+            expected_conditional += -0.5 * ((self.weight_means[tissue] ** 2 + self.weight_vars[tissue]) * self.pi).sum()
+        return expected_conditional
+
+    def _b(self):
+        expected_conditional = 0
+        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        for tissue in range(self.dims['T']):
+            p = self.active[tissue] @ (self.pi * self.weight_means[tissue])
+            expected_conditional += np.inner(self.Y[tissue], p)
+
+            expected_conditional += -0.5 * (p @ self.X @ p)
+            # add trace term
+            for component in range(self.dims['K']):
+                mu, mu2 = self._compute_moments(tissue, component)
+                expected_conditional += -0.5 * np.sum(mu2 - mu**2)
+        return expected_conditional
+
+
+    def _c(self):
+        expected_conditional = 0
+        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        for tissue in range(self.dims['T']):
+            p = self.active[tissue] @ (self.pi * self.weight_means[tissue])
+            expected_conditional += np.inner(self.Y[tissue], p)
+
+            C = np.zeros((1000, 1000))
+            for k1 in range(self.dims['K']):
+                for k2 in range(self.dims['K']):
+                    if k1 != k2:
+                        C += np.outer(self.weight_means[tissue, k1] * self.pi[k1], self.weight_means[tissue, k2] * self.pi[k2])
+                    else:
+                        C += np.diag((self.weight_means[tissue, k1]**2 + self.weight_vars[tissue, k1]) * self.pi[k1])
+            expected_conditional += -0.5 * np.einsum('ij,ij->i', self.X, C).sum()
+        return expected_conditional
+
+    def _d(self):
+        expected_conditional = 0
+        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        for tissue in range(self.dims['T']):
+            p = self.active[tissue] @ (self.pi * self.weight_means[tissue])
+            expected_conditional += np.inner(self.Y[tissue], p)
+            for k1 in range(self.dims['K']):
+                for k2 in range(self.dims['K']):
+                    a = self.weight_means[tissue, k1] * self.pi[k1]
+                    b = self.weight_means[tissue, k2] * self.pi[k2]
+                    if k1 != k2:
+                        expected_conditional += -0.5 * a @ self.X @ b
+                    else:
+                        mu2 = (self.weight_means[tissue, k1]**2 + self.weight_vars[tissue, k1]) * self.pi[k1]
+                        expected_conditional += -0.5 * mu2.sum()
+        return expected_conditional
+    def get_ld(self, snps):
+        return self.X[snps][:, snps]
 
     def sort_components(self):
         """
