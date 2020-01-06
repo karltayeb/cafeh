@@ -6,7 +6,13 @@ from .kls import unit_normal_kl, normal_kl, categorical_kl
 #########################
 # MODEL QUERY FUNCTIONS #
 #########################
-
+def get_expected_weights(self):
+    if self.weight_means.ndim == 2:
+        weights = self.weight_means * self.active
+    else:
+        weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
+    return weights
+    
 def get_top_snp_per_component(self):
     """
     returns snp with highest posterior probability for each component
@@ -27,12 +33,15 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
         credible_sets[k] = self.snp_ids[cset]
 
     purities = {}
-    for key, value in credible_sets.items():
-        ld = np.atleast_2d(np.corrcoef(self.X[value]))
-        if ld.shape[0] == 1:
-            purity = 1.0
+    for key, snps in credible_sets.items():
+        if snps.size > 100:
+            purity = 0.0
         else:
-            purity = np.abs(ld[np.tril_indices(ld.shape[0], -1)]).min()
+            ld = self.get_ld(snps)
+            if ld.shape[0] == 1:
+                purity = 1.0
+            else:
+                purity = np.abs(ld[np.tril_indices(ld.shape[0], -1)]).min()
         purities[key] = purity
 
     return credible_sets, purities

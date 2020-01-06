@@ -7,6 +7,7 @@ import seaborn as sns
 from .kls import unit_normal_kl, normal_kl, categorical_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
+from .utils import np_cache_class
 
 class SimpleMVNFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
@@ -69,10 +70,23 @@ class SimpleMVNFactorSER:
         residual computation, works when X is 2d or 3d
         k is a component to exclude from residual computation
         """
-        prediction = self._compute_prediction(k)
+        prediction = self.compute_prediction(k)
         residual = self.Y - prediction
         return residual
 
+    @np_cache_class()
+    def _compute_prediction_component(self, active, pi, weights):
+        return (active * weights)[:, None] * pi @ self.X
+
+    def compute_prediction_component(self, k):
+        return self._compute_prediction_component(self.active[:, k], self.pi[k], self.weight_means[:, k])
+
+    def compute_prediction(self, k=None):
+        prediction = np.sum([self.compute_prediction_component(l) for l in range(self.dims['K'])], axis=0)
+        if k is not None:
+            prediction -= self.compute_prediction_component(k)
+        return prediction
+        
     def _compute_prediction(self, k=None):
         W = self.weight_means * self.active
         if self.X.ndim == 2:
@@ -224,16 +238,12 @@ class SimpleMVNFactorSER:
         self.elbos.append(self.compute_elbo())
         for i in range(max_iter):
             for l in components:
-                if update_weights:
-                    self._update_weight_component(l, ARD=ARD_weights)        
-                
-                if update_pi:
-                    self._update_pi_component(l)
-                
-                if update_active:
-                    self._update_active_component(l, ARD=ARD_active)
+                if update_weights: self._update_weight_component(l, ARD=ARD_weights)        
+                if update_pi: self._update_pi_component(l)
+                if update_active: self._update_active_component(l, ARD=ARD_active)
 
             self.elbos.append(self.compute_elbo())
+            if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
 
             diff = self.elbos[-1] - self.elbos[-2]
             if (np.abs(diff) < self.tolerance):
@@ -285,7 +295,10 @@ class SimpleMVNFactorSER:
             # KL (q(z) || p (z))
             KL += categorical_kl(self.pi.T[:, k], np.ones(self.dims['N']) / self.dims['N'])
         bound -= KL
-        return bound 
+        return bound
+
+    def get_ld(self, snps):
+        return self.X[snps][:, snps]
 
     def sort_components(self):
         """

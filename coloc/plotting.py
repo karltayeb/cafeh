@@ -96,7 +96,8 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
     snps = np.concatenate(snps)
     
     fig, ax = plt.subplots(1, figsize=(6, 5))
-    sns.heatmap(self.X[snps][:, snps],
+    ld = self.get_ld(snps)
+    sns.heatmap(ld,
         cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True,
         yticklabels=self.snp_ids[snps], xticklabels=[])
     ax.hlines(np.cumsum(sizes), *ax.get_xlim(), colors='w', lw=3)
