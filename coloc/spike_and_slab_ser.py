@@ -8,12 +8,13 @@ from .kls import unit_normal_kl, normal_kl, categorical_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
 from .utils import np_cache_class
+import time
 
 class SimpleMVNFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip
+    from .model_queries import get_credible_sets, get_pip, check_convergence
 
-    def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-6):
+    def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-5):
         """
         X [N x N] covariance matrix
             if X is [T x N x N] use seperate embedding for each tissue
@@ -29,11 +30,11 @@ class SimpleMVNFactorSER:
         # priors
         self.prior_variance = np.ones((T, K)) * prior_variance
         self.prior_activity = np.ones(K) * prior_activity
-        self.prior_pi = prior_pi or np.ones(N) / N
+        self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
 
         # ids
-        self.tissue_ids = tissue_ids or np.arange(T)
-        self.snp_ids = snp_ids or np.arange(N)
+        self.tissue_ids = tissue_ids if (tissue_ids is not None) else np.arange(T)
+        self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
 
         # initialize variational parameters
         self.pi = np.ones((K, N)) / N
@@ -43,6 +44,7 @@ class SimpleMVNFactorSER:
 
         self.elbos = []
         self.tolerance = tolerance
+        self.run_time = 0
 
     ################################
     # UPDATE AND FITTING FUNCTIONS #
@@ -86,7 +88,7 @@ class SimpleMVNFactorSER:
         if k is not None:
             prediction -= self.compute_prediction_component(k)
         return prediction
-        
+
     def _compute_prediction(self, k=None):
         W = self.weight_means * self.active
         if self.X.ndim == 2:
@@ -232,10 +234,10 @@ class SimpleMVNFactorSER:
         """
         loop through updates until convergence
         """
+        init_time = time.time()
         if components is None:
             components = np.arange(self.dims['K'])
 
-        self.elbos.append(self.compute_elbo())
         for i in range(max_iter):
             for l in components:
                 if update_weights: self._update_weight_component(l, ARD=ARD_weights)        
@@ -245,11 +247,14 @@ class SimpleMVNFactorSER:
             self.elbos.append(self.compute_elbo())
             if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
 
-            diff = self.elbos[-1] - self.elbos[-2]
-            if (np.abs(diff) < self.tolerance):
+            cur_time = time.time()
+            if self.check_convergence():
                 if verbose:
                     print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
                 break
+        self.run_time = cur_time - init_time
+        if verbose:
+            print('cumulative run time: {}'.format(self.run_time))
 
     def forward_fit(self, max_iter=1000, verbose=False, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
         for k in range(self.dims['K']):

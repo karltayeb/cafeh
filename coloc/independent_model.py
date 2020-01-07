@@ -5,12 +5,13 @@ import os, sys, pickle
 from scipy.optimize import minimize_scalar
 from .utils import np_cache_class
 from functools import lru_cache
+import time
 
 class IndependentFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip, get_expected_weights
+    from .model_queries import get_credible_sets, get_pip, get_expected_weights, check_convergence
 
-    def __init__(self, X, Y, K, covariates=None, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-6):
+    def __init__(self, X, Y, K, covariates=None, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
         """
         Y [T x M] expresion for tissue, individual
         X [N x M] genotype for snp, individual
@@ -39,7 +40,7 @@ class IndependentFactorSER:
 
         self.prior_variance = np.ones((T, K)) * prior_variance
         self.prior_activity = np.ones(K) * prior_activity
-        self.prior_pi = prior_pi or np.ones(N) / N
+        self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
 
         # initialize latent vars
         self.active = np.ones((T, K))
@@ -58,7 +59,8 @@ class IndependentFactorSER:
         self.beta = 1e-10
 
         self.elbos = []
-        self.tolerance = 1e-3
+        self.tolerance = tolerance
+        self.run_time = 0
 
     @lru_cache()
     def _get_mask(self, tissue):
@@ -138,7 +140,7 @@ class IndependentFactorSER:
         weights = np.zeros_like(self.cov_weights[tissue])
         Y = np.squeeze(residual[self.tissue_ids == tissue, np.isin(self.sample_ids, self.covariates[tissue].columns)])
         X = self.covariates[tissue].values
-        self.cov_weights[tissue] = np.linalself.pinv(X.T) @ Y
+        self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
 
     def _update_pi_component(self, k, precomputed_residual=None):
         """
@@ -272,10 +274,10 @@ class IndependentFactorSER:
         """
         loop through updates until convergence
         """
+        init_time = time.time()
         if components is None:
             components = np.arange(self.dims['K'])
 
-        self.elbos.append(self.compute_elbo())
         for i in range(max_iter):
             # update covariate weights
             if (self.covariates is not None) and update_covariate_weights:
@@ -294,11 +296,15 @@ class IndependentFactorSER:
             self.elbos.append(self.compute_elbo())
             if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
 
-            diff = self.elbos[-1] - self.elbos[-2]
-            if (np.abs(diff) < self.tolerance):
+            cur_time = time.time()
+            if self.check_convergence():
                 if verbose:
                     print('ELBO converged with tolerance {} at iter: {}'.format(self.tolerance, i))
                 break
+
+        self.run_time += cur_time - init_time
+        if verbose:
+            print('cumulative run time: {}'.format(self.run_time))
 
     def forward_fit(self, max_iter=1000, verbose=False, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
         for k in range(self.dims['K']):
@@ -338,3 +344,11 @@ class IndependentFactorSER:
     @np_cache_class()
     def get_ld(self, snps):
         return np.atleast_2d(np.corrcoef(self.X[snps.astype(int)]))
+
+    def save(self, output_dir, model_name):
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        if output_dir[-1] == '/':
+            output_dir = output_dir[:-1]
+        pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
+

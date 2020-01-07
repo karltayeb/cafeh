@@ -6,6 +6,14 @@ from .kls import unit_normal_kl, normal_kl, categorical_kl
 #########################
 # MODEL QUERY FUNCTIONS #
 #########################
+def check_convergence(self):
+    if len(self.elbos) > 2:
+        delta = np.abs((self.elbos[-1] - self.elbos[-2]) / self.elbos[-2])
+        if delta < self.tolerance:
+            return True
+    else:
+        return False
+
 def get_expected_weights(self):
     if self.weight_means.ndim == 2:
         weights = self.weight_means * self.active
