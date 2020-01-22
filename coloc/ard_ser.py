@@ -43,7 +43,7 @@ class MVNFactorSER:
         self.pi = np.ones((K, N)) / N
         self.weight_means = np.zeros((T, K, N))
 
-        prior_variance = 1 / self.prior_precision * self.prior_component_precision
+        prior_variance = 1 / (self.prior_precision * self.prior_component_precision)
         self.weight_vars = (prior_variance / (prior_variance + 1))[:, :, None] * np.ones((T, K, N))
         self.active = np.ones((T, K))
 
@@ -51,8 +51,8 @@ class MVNFactorSER:
         self.tolerance = tolerance
         self.run_time = 0
 
-        self.alpha0 = 1.5
-        self.beta0 = 1e-3
+        self.alpha0 = 1.0
+        self.beta0 = 1e-10
 
         self.alpha0_component = 1.0
         self.beta0_component = 1.0

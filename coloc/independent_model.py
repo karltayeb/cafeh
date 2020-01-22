@@ -3,7 +3,7 @@ from scipy.stats import norm
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
-from .utils import np_cache_class
+from .utils import np_cache_class, gamma_logpdf
 from functools import lru_cache
 import time
 
@@ -38,7 +38,7 @@ class IndependentFactorSER:
         self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
         self.sample_ids = sample_ids if (sample_ids is not None) else np.arange(M)
 
-        self.prior_variance = np.ones((T, K)) * prior_variance
+        self.prior_precision = np.ones((T, K))
         self.prior_activity = np.ones(K) * prior_activity
         self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
 
@@ -55,12 +55,15 @@ class IndependentFactorSER:
             self.cov_weights = None
 
         # hyper-parameters
-        self.alpha = 1e-10
-        self.beta = 1e-10
+        self.alpha0 = 1.0
+        self.beta0 = 1e-10
 
         self.elbos = []
         self.tolerance = tolerance
         self.run_time = 0
+
+    def prior_variance(self):
+        return 1 / self.prior_precision
 
     @lru_cache()
     def _get_mask(self, tissue):
@@ -157,7 +160,7 @@ class IndependentFactorSER:
             + self.weight_means[:, k] ** 2 * diag
         )
         tmp2 = -0.5 * (1 / self.tissue_variance[:, None]) * (self.weight_vars[:, k]) * diag
-        tmp3 = -1 * normal_kl(self.weight_means[:, k], self.weight_vars[:, k], 0.0, self.prior_variance[:, k][:, None])
+        tmp3 = -1 * normal_kl(self.weight_means[:, k], self.weight_vars[:, k], 0.0, self.prior_variance()[:, k][:, None])
         pi_k = (tmp1 + tmp2 + tmp3) * self.active[:, k][:, None]
 
         pi_k = pi_k.sum(0)
@@ -172,14 +175,17 @@ class IndependentFactorSER:
         update weights for a component
         """
         if ARD:
-            self.prior_variance[:, k] = \
-                (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k] * self.active[:, k]
+            second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k] 
+            alpha = self.alpha0 + 0.5
+            beta = self.beta0 + second_moment / 2
+            self.prior_precision[:, k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
+        
         mask = np.isnan(self.Y)
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
         r_k = self.compute_residual(k)
         r_k[mask] = 0
         
-        precision = (diag / self.tissue_variance[:, None]) + (1 / self.prior_variance[:, k])[:, None]
+        precision = (diag / self.tissue_variance[:, None]) + (1 / self.prior_variance()[:, k])[:, None]
         variance = 1 / precision
         mean = (variance / self.tissue_variance[:, None]) * (r_k @ self.X.T)
         self.weight_vars[:, k] = variance
@@ -199,20 +205,17 @@ class IndependentFactorSER:
         diag = np.array([self._get_diag(k) for t in range(self.dims['T'])])
         r_k = self.compute_residual(k)
         r_k[mask] = 0
-
         off = np.sum(norm.logpdf(x=r_k, loc=0.0, scale=np.sqrt(self.tissue_variance)[:, None])) \
             + np.log(1 - self.prior_activity[k] + 1e-10)
-
         tmpa = self.weight_means[:, k] * self.X
         tmpa[mask] = 0
-
         tmp1 = (-0.5 * np.log(2 * np.pi * self.tissue_variance) * mask.sum(1)) - 0.5 / self.tissue_variance *
             ((r_k - tmpa) ** 2).sum(1)
         tmp2 = (-0.5 / self.tissue_variance) * (self.weight_vars[:, k]) * diag
         tmp3 = -1 * normal_kl(self.weight_means[:, k],
                               self.weight_vars[:, k],
                               0.0,
-                              self.prior_variance[tissue, k])
+                              self.prior_variance()[tissue, k])
         on = np.inner(tmp1 + tmp2 + tmp3, self.pi[k]) + np.log(self.prior_activity[k] + 1e-10)
         """
         self.active[tissue, k] = np.clip(1 / (1 + np.exp(-(on - off))), 1e-5, 1-1e-5)
@@ -229,7 +232,7 @@ class IndependentFactorSER:
             tmp3 = -1 * normal_kl(self.weight_means[tissue, k],
                                   self.weight_vars[tissue, k],
                                   0.0,
-                                  self.prior_variance[tissue, k])
+                                  self.prior_variance()[tissue, k])
             on = np.inner(tmp1 + tmp2 + tmp3, self.pi[k]) + np.log(self.prior_activity[k] + 1e-10)
 
             self.active[tissue, k] = np.clip(1 / (1 + np.exp(-(on - off))), 1e-5, 1-1e-5)
@@ -325,10 +328,9 @@ class IndependentFactorSER:
             mask = self._get_mask(tissue)
             expected_conditional += -0.5 * mask.sum() * np.log(2 * np.pi * self.tissue_variance[tissue]) \
                 -0.5 / self.tissue_variance[tissue] * ERSS[tissue]
-
         # KL(q(W | S) || p(W)) = KL(q(W | S = 1) || p(W)) q(S = 1) + KL(p(W) || p(W)) (1 - q(S = 1))
         KL += np.sum(
-            normal_kl(self.weight_means, self.weight_vars, 0, self.prior_variance[..., None]) 
+            normal_kl(self.weight_means, self.weight_vars, 0, self.prior_variance()[..., None]) 
             * (self.active[..., None] * self.pi[None])
         )
 
@@ -336,7 +338,7 @@ class IndependentFactorSER:
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
-
+        KL += np.sum(gamma_logpdf(self.prior_precision, self.alpha0, self.beta0))
         #TODO ADD lnp(prior_weight_variance) + lnp(prior_slab_weights)
 
         return expected_conditional - KL
@@ -363,4 +365,3 @@ class IndependentFactorSER:
         if not save_data:
             self.__dict__['X'] = X
             self.__dict__['Y'] = Y
-
