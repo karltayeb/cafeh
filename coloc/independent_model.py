@@ -96,7 +96,7 @@ class IndependentFactorSER:
         """
         predict from covariates
         compute is a boolean of whether to predict or return 0
-            exists to clean up stuff in _compute_prediction
+            exists to clean up stuff in compute_prediction
         """
         prediction = np.zeros_like(self.Y)
         if (self.covariates is not None) and compute:
@@ -105,7 +105,7 @@ class IndependentFactorSER:
                     self.cov_weights[tissue] @ self.covariates[tissue].values
         return prediction
 
-    def _compute_prediction(self, k=None, use_covariates=True):
+    def compute_prediction(self, k=None, use_covariates=True):
         """
         compute expected prediction
         """
@@ -120,7 +120,7 @@ class IndependentFactorSER:
         """
         computes expected residual
         """
-        prediction = self._compute_prediction(k, use_covariates)
+        prediction = self.compute_prediction(k, use_covariates)
         return self.Y - prediction
 
     def _compute_ERSS(self, precomputed_residual=None):
@@ -341,14 +341,26 @@ class IndependentFactorSER:
 
         return expected_conditional - KL
 
-    @np_cache_class()
+    def sort_components(self):
+        """
+        sort components by maximum component weight
+        """
     def get_ld(self, snps):
         return np.atleast_2d(np.corrcoef(self.X[snps.astype(int)]))
 
-    def save(self, output_dir, model_name):
+    def save(self, output_dir, model_name, save_data=False):
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
         if output_dir[-1] == '/':
             output_dir = output_dir[:-1]
+
+        if not save_data:
+            X = self.__dict__.pop('X')
+            Y = self.__dict__.pop('Y')
+
         pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
+        
+        if not save_data:
+            self.__dict__['X'] = X
+            self.__dict__['Y'] = Y
 

@@ -85,11 +85,10 @@ def plot_pips(self, thresh=0.5, star=None, save_path=None, show=True):
 def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
     if snps is None:
         snps = []
-    active = self.active.max(0) > thresh
     credible_sets, purity = self.get_credible_sets(alpha=alpha)
-    for k in np.arange(self.dims['K'])[active]:
+    for k in np.arange(self.dims['K']):
         if purity[k] > thresh:
-            cset = credible_sets[k]
+            cset = np.arange(self.dims['N'])[np.isin(self.snp_ids, credible_sets[k])]
             snps.append(cset)
 
     sizes = np.array([x.size for x in snps])
@@ -113,25 +112,24 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
     """
     plot inducing point posteriors, weight means, and probabilities
     """
-    if self.weight_means.ndim == 2:
-        weights = self.weight_means * self.active
-    else:
-        weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
+    weights = self.get_expected_weights()
     # make plot
-    active_components = self.active.max(0) > thresh
-    if np.all(~active_components):
-        active_components[:3] = True
-
+    cs, pur = self.get_credible_sets()
     fig, ax = plt.subplots(1, 3, figsize=(18, 4))
-    for k in np.arange(self.dims['K'])[active_components]:
-        if (self.pi.T[:, k] > 2/self.dims['N']).sum() > 0:
-            ax[2].scatter(np.arange(self.dims['N'])[self.pi.T[:, k] > 2/self.dims['N']], self.pi.T[:, k][self.pi.T[:, k] > 2/self.dims['N']], alpha=0.5, label='k{}'.format(k))
+    for k in np.arange(self.dims['K']):
+        if pur[k] > thresh: 
+            ax[2].scatter(
+                np.arange(self.dims['N'])[self.pi.T[:, k] > 2/self.dims['N']],
+                self.pi.T[:, k][self.pi.T[:, k] > 2/self.dims['N']],
+                alpha=0.5, label='k{}'.format(k))
     ax[2].scatter(np.arange(self.dims['N']), np.zeros(self.dims['N']), alpha=0.0)
     ax[2].set_title('pi')
     ax[2].set_xlabel('SNP')
     ax[2].set_ylabel('probability')
-    ax[2].legend()
+    ax[2].legend(bbox_to_anchor=(1.04,1), loc="upper left")
 
+
+    active_components = np.array([k for k in range(self.dims['K']) if pur[k] >= thresh])
     vmax = np.abs(weights[:, active_components]).max()
     vmin = -vmax
     sns.heatmap(weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1], yticklabels=[], vmin=vmin, vmax=vmax)
@@ -162,7 +160,7 @@ def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=Non
     W = self.active * self.weight_means
     c = (self.X @ self.pi.T)
 
-    pred = self._compute_prediction()
+    pred = self.compute_prediction()
     logp = -norm.logcdf(-np.abs(pred)) - np.log(2)
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
@@ -183,7 +181,7 @@ def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=Non
         ulim = []
         llim = []
         for k in components:
-            predk = self._compute_prediction() - self._compute_prediction(k=k)
+            predk = self.compute_prediction() - self._compute_prediction(k=k)
             logpk = -norm.logcdf(-np.abs(predk)) - np.log(2)
 
             if i == 0:
@@ -230,7 +228,7 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
     W = self.active * self.weight_means
     c = (self.X @ self.pi.T)
 
-    pred = self._compute_prediction()
+    pred = self.compute_prediction()
     fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
 
     ax = np.array(ax).flatten()
@@ -238,7 +236,7 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
         ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
 
         for k in components:
-            predk = self._compute_prediction() - self._compute_prediction(k=k)
+            predk = self.compute_prediction() - self._compute_prediction(k=k)
             logpk = -norm.logcdf(-np.abs(predk)) - np.log(2)
             if i == 0:
                 ax[i].scatter(pos, logpk, marker='o', alpha=0.5, label='k{}'.format(k))
@@ -253,49 +251,52 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
     # plt.show()
     plt.close()
 
-def plot_decomposed_zscores(self, tissues=None, components=None, save_path=None, show=True):
+def plot_decomposed_zscores(self, tissues=None, components=None, thresh=0.9, save_path=None, show=True):
     if tissues is None:
         tissues = np.arange(self.dims['T'])
     else:
         tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
 
     if components is None:
-        components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
+        _, pur = self.get_credible_sets()
+        pur = np.array([pur[k] for k in range(self.dims['K'])])
+        components = np.arange(self.dims['K'])[pur >= thresh]
 
-    pred = self._compute_prediction()
+    pred = self.compute_prediction()
     logp = -np.log(norm.cdf(-np.abs(pred))*2)
     
     #pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
     pos = np.arange(self.snp_ids.size)
 
-    pred = self._compute_prediction()
+    pred = self.compute_prediction()
     fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
+    
+    ax = np.atleast_2d(ax)
+    if ax.shape[0] == 1:
+        ax = ax.T
+
     for i, t in enumerate(tissues):
-        ulim = []
-        llim = []
         ax[0, i].set_title('{}\nzscores'.format(self.tissue_ids[t]))
         ax[1, i].set_title('components')
-        ax[0, i].scatter(pos, pred[t], marker='x', c='k', alpha=0.5)
-        ulim.append(pred[t].max())
-        llim.append(pred[t].min())
-
-        for k in components:
-            predk = self._compute_prediction()[t] - self._compute_prediction(k=k)[t]
-            if i == 0:
-                ax[1, i].scatter(pos, predk, marker='o', alpha=self.active[t, k], label='k{}'.format(k))
-            else:
-                ax[1, i].scatter(pos, predk, marker='o', alpha=self.active[t, k])
-            ulim.append(predk.max())
-            llim.append(predk.min())
-
-        ulim = np.array(ulim).max()
-        llim = np.array(llim).min()
-
-        #ax[0, i].set_ylim(llim, ulim)
-        #ax[1, i].set_ylim(llim, ulim)
         ax[1, i].set_xlabel('SNP position')
-        fig.legend()
 
+        if i == 0:
+            ax[0, i].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5, label='zscore')
+            ax[0, i].scatter(pos, pred[t], marker='o', c='r', alpha=0.5, label='prediction')
+        else:
+            ax[0, i].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5)
+            ax[0, i].scatter(pos, pred[t], marker='o', c='r', alpha=0.5)
+
+    for k in components:
+        predk = self.compute_prediction_component(k)
+        for i, t in enumerate(tissues):
+            predkt = predk[t]
+            if i == 0:
+                ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k], label='k{}'.format(k))
+            else:
+                ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k])
+        fig.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3, ncol=(components.size)+2, borderaxespad=0.)
+    
     plt.tight_layout()
     if save_path is not None:
         plt.savefig(save_path)
@@ -318,7 +319,7 @@ def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, sa
     else:
         height = int(tissues.size / width) + 1
 
-    pred = self._compute_prediction()
+    pred = self.compute_prediction()
     logp = -np.log(norm.cdf(-np.abs(pred))*2)
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
@@ -333,7 +334,7 @@ def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, sa
         ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
 
         for k in components:
-            predk = self._compute_prediction() - self._compute_prediction(k=k)
+            predk = self.compute_prediction() - self._compute_prediction(k=k)
             if i == 0:
                 ax[i].scatter(pos, predk, marker='o', alpha=0.5, label='k{}'.format(k))
             else:
@@ -441,7 +442,7 @@ def plot_predictions(self, save_path=None, show=True):
     """
     plot predictions against observed z scores
     """
-    pred = self._compute_prediction()
+    pred = self.compute_prediction()
     fig, ax = plt.subplots(2, self.dims['T'], figsize=(4*self.dims['T'], 6), sharey=True)
     for t in range(self.dims['T']):
         ax[0, t].scatter(np.arange(self.dims['N']), self.Y[t], marker='x', c='k', alpha=0.5)

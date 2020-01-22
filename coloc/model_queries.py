@@ -35,13 +35,14 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
     """
     credible_sets = {}
     active = self.active.max(0) > thresh
+    credible_set_idx = {}
     for k in np.arange(self.dims['K'])[active]:
         cset_size = (np.cumsum(np.flip(np.sort(self.pi.T[:, k]))) < alpha).sum() + 1
         cset = np.flip(np.argsort(self.pi.T[:, k])[-cset_size:])
         credible_sets[k] = self.snp_ids[cset]
-
+        credible_set_idx[k] = cset
     purities = {}
-    for key, snps in credible_sets.items():
+    for key, snps in credible_set_idx.items():
         if snps.size > 100:
             purity = 0.0
         else:
@@ -73,7 +74,6 @@ def get_pip(self):
     """
     pip = np.zeros(self.dims['N'])
     for n in range(self.dims['N']):
-
         pip[n] = 1 - np.exp(np.sum([np.log(1 - self.pi.T[n, k] * 
             (1 - np.exp(np.sum([np.log(1 - self.active[t, k]) 
                 for t in range(self.dims['T'])]))))

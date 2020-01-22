@@ -13,7 +13,7 @@ import time
 
 class MVNFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip, check_convergence
+    from .model_queries import get_credible_sets, get_pip, check_convergence, get_expected_weights
 
     def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-5):
         """
@@ -272,15 +272,26 @@ class MVNFactorSER:
         """
         reorder components so that components with largest weights come first
         """
-        order = np.flip(np.argsort(np.abs(self.weight_means).max(0)))
+        order = np.flip(np.argsort(np.abs(self.get_expected_weights()).max(0)))
         self.weight_means = self.weight_means[:, order]
         self.active = self.active[:, order]
-        self.pi.T = self.pi.T[:, order]
+        self.pi = self.pi[order]
+        self._compute_prediction_component.cache_clear()
 
-    def save(self, output_dir, model_name):
+    def save(self, output_dir, model_name, save_data=False):
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
+
         if output_dir[-1] == '/':
             output_dir = output_dir[:-1]
+
+        if not save_data:
+            X = self.__dict__.pop('X')
+            Y = self.__dict__.pop('Y')
+            
         pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
+
+        if not save_data:
+            self.__dict__['X'] = X
+            self.__dict__['Y'] = Y
 
