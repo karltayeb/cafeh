@@ -10,7 +10,7 @@ from scipy.optimize import minimize_scalar
 
 class MVNFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip
+    from .model_queries import get_credible_sets, get_pip, get_expected_weights
 
     def __init__(self, X, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-3):
         """
@@ -20,11 +20,12 @@ class MVNFactorSER:
         """
 
         # precompute svd, need for computing elbo
-        u, s, vh = np.linalg.svd(X)
+        #u, s, vh = np.linalg.svd(X)
         T, N = Y.shape
 
         self.X = X
-        self.U = u * np.sqrt(s)
+        #self.U = u * np.sqrt(s)
+        self.U = np.eye(X.shape[0])
         self.Y = Y
 
         self.dims = {'N': N, 'T': T, 'K': K}
@@ -46,8 +47,6 @@ class MVNFactorSER:
 
         self.elbos = []
         self.tolerance = tolerance
-
-        self.x_is_ld = True
 
     ################################
     # UPDATE AND FITTING FUNCTIONS #
@@ -90,7 +89,23 @@ class MVNFactorSER:
                 prediction[tissue] -= self.active[tissue, k] * (self.pi[k] * self.weight_means[tissue, k]) @ self.X
         return prediction
 
-    def _compute_residual(self, k=None):
+    def _compute_prediction_component(self, k):
+        """
+        compute prediction for a component
+        """
+        active = self.active[:, k]
+        weights = self.weight_means[:, k]
+        pi = self.pi[k]
+        return (active[:, None] * weights * pi) @ self.X
+
+    def compute_prediction(self, k=None, use_covariates=True):
+        prediction = self._compute_covariate_prediction(use_covariates)
+        for l in range(self.dims['K']):
+            if l is not k: 
+                prediction += self._compute_prediction_component(l)
+        return prediction
+
+    def compute_residual(self, k=None):
         """
         residual computation, works when X is 2d or 3d
         k is a component to exclude from residual computation
@@ -111,8 +126,9 @@ class MVNFactorSER:
               * self.weight_means[tissue, component]) @ self.U
         return mu, mu2
 
+
     def _update_weight_component(self, k, precomputed_residual=None, ARD=False):
-        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self.compute_residual(k)
         for tissue in range(self.dims['T']):
             if ARD:
                 self.prior_variance[tissue, k] = np.inner(
@@ -158,7 +174,7 @@ class MVNFactorSER:
             a = self.active[:, k].sum() + 1
             b = 1 - self.active[:, k].sum() + self.dims['T']
             self.prior_activity[k] = (a - 1) / (a + b - 2)
-        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self.compute_residual(k)
         for t in range(self.dims['T']):
             self._update_active_component_tissue(r_k, t, k)
 
@@ -178,7 +194,7 @@ class MVNFactorSER:
 
     def _update_pi_component(self, k, precomputed_residual=None, ARD=False):
         # compute residual
-        r_k = precomputed_residual if (precomputed_residual is not None) else self._compute_residual(k)
+        r_k = precomputed_residual if (precomputed_residual is not None) else self.compute_residual(k)
 
         pi_k = (r_k * self.weight_means[:, k]
                 - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k])
@@ -209,15 +225,17 @@ class MVNFactorSER:
             components = np.arange(self.dims['K'])
 
         self.elbos.append(self.compute_elbo())
+        r = self.compute_residual()
         for i in range(max_iter):
             for l in components:
-                r_l = self._compute_residual(l)
+                r_l = r + self._compute_prediction_component(l)
                 if update_weights:
                     self._update_weight_component(l, precomputed_residual=r_l, ARD=ARD_weights)
                 if update_pi:
                     self._update_pi_component(l, precomputed_residual=r_l)
                 if update_active:
                     self._update_active_component(l, precomputed_residual=r_l, ARD=ARD_active)
+                r = r_l - self._compute_prediction_component(l)
 
             self.elbos.append(self.compute_elbo())
 
@@ -240,22 +258,6 @@ class MVNFactorSER:
         if active is None:
             active = self.active
 
-        """
-        if self.X.ndim == 2:
-            Kzz = self.pi.T.T @ self.X @ self.pi.T
-            Kzz = Kzz + np.diag(np.ones(self.dims['K']) - np.diag(Kzz))
-            self.X
-        for t in range(self.dims['T']):
-            if self.X.ndim == 3:
-                Kzz = self.pi.T.T @ self.X[t] @ self.pi.T
-                Kzz = Kzz + np.diag(np.ones(self.dims['K']) - np.diag(Kzz))
-
-            bound += self.Y[t] @ (self.pi.T @ W[t])
-            bound += -0.5 * W[t] @ Kzz @ W[t]
-            bound += -0.5 * np.sum(
-                (self.weight_means[t]**2 + self.weight_vars[t]) * active[t] - (self.weight_means[t] * active[t])**2
-            )
-        """
         expected_conditional = 0
         KL = 0
 
@@ -282,6 +284,9 @@ class MVNFactorSER:
 
         # TODO ADD lnp(prior_weight_variance) + lnp(prior_slab_weights)
         return expected_conditional - KL
+
+    def get_ld(self, snps):
+        return self.X[snps][:, snps]
 
     def sort_components(self):
         """
