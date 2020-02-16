@@ -124,9 +124,9 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
     weights = self.get_expected_weights()
     
     # make plot
-    active_components = self.active.max(0) > thresh
+    active_components = np.array([p[k] > 0.5 for k in range(self.dims['K'])])
     if np.all(~active_components):
-        active_components[:3] = True
+        active_components[:1] = True
 
     fig, ax = plt.subplots(1, 3, figsize=(18, 4))
     for k in np.arange(self.dims['K'])[active_components]:
