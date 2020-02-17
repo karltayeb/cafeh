@@ -267,7 +267,6 @@ def plot_decomposed_zscores(self, tissues=None, components=None, thresh=0.9, sav
 
     fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
     ax = np.atleast_2d(ax)
-    import pdb; pdb.set_trace()
     if ax.shape[0] == 1:
         ax = ax.T
 
