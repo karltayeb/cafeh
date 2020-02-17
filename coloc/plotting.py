@@ -252,51 +252,45 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
     plt.close()
 
 def plot_decomposed_zscores(self, tissues=None, components=None, thresh=0.9, save_path=None, show=True):
+    """
     if tissues is None:
         tissues = np.arange(self.dims['T'])
     else:
         tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
-
-    if components is None:
-        _, pur = self.get_credible_sets()
-        pur = np.array([pur[k] for k in range(self.dims['K'])])
-        components = np.arange(self.dims['K'])[pur >= thresh]
+    """
+    tissues = np.arange(self.dims['T'])
+    cs, p = self.get_credible_sets()
+    components = np.array(k for k in range(self.dims['K']) if p[k] > 0.5)
 
     pred = self.compute_prediction()
-    logp = -np.log(norm.cdf(-np.abs(pred))*2)
-    
-    #pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
     pos = np.arange(self.snp_ids.size)
 
-    pred = self.compute_prediction()
     fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
-    
     ax = np.atleast_2d(ax)
     if ax.shape[0] == 1:
         ax = ax.T
 
-    for i, t in enumerate(tissues):
-        ax[0, i].set_title('{}\nzscores'.format(self.tissue_ids[t]))
-        ax[1, i].set_title('components')
-        ax[1, i].set_xlabel('SNP position')
+    for t in tissues:
+        ax[0, t].set_title('{}\nzscores'.format(self.tissue_ids[t]))
+        ax[1, t].set_title('components')
+        ax[1, t].set_xlabel('SNP position')
 
-        if i == 0:
-            ax[0, i].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5, label='zscore')
-            ax[0, i].scatter(pos, pred[t], marker='o', c='r', alpha=0.5, label='prediction')
+        if t == 0:
+            ax[0, t].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5, label='zscore')
+            ax[0, t].scatter(pos, pred[t], marker='o', c='r', alpha=0.5, label='prediction')
         else:
-            ax[0, i].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5)
-            ax[0, i].scatter(pos, pred[t], marker='o', c='r', alpha=0.5)
+            ax[0, t].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5)
+            ax[0, t].scatter(pos, pred[t], marker='o', c='r', alpha=0.5)
 
     for k in components:
         predk = self.compute_prediction_component(k)
-        for i, t in enumerate(tissues):
-            predkt = predk[t]
-            if i == 0:
-                ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k], label='k{}'.format(k))
-            else:
-                ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k])
+        predkt = predk[t]
+        if i == 0:
+            ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k], label='k{}'.format(k))
+        else:
+            ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k])
         fig.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3, ncol=(components.size)+2, borderaxespad=0.)
-    
+
     plt.tight_layout()
     if save_path is not None:
         plt.savefig(save_path)
