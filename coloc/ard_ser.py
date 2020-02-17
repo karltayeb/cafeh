@@ -38,7 +38,7 @@ class MVNFactorSER:
         # ids
         self.tissue_ids = tissue_ids if (tissue_ids is not None) else np.arange(T)
         self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
-        
+
         # initialize variational parameters
         self.pi = np.ones((K, N)) / N
         self.weight_means = np.zeros((T, K, N))
@@ -56,11 +56,14 @@ class MVNFactorSER:
 
         self.alpha0_component = 1.0
         self.beta0_component = 1.0
+
     ################################
     # UPDATE AND FITTING FUNCTIONS #
     ################################
-
     def prior_variance(self):
+        """
+        return prior variance
+        """
         return 1 / (self.prior_precision * self.prior_component_precision)
 
     @np_cache_class()
@@ -94,7 +97,6 @@ class MVNFactorSER:
         r_k = self.compute_residual(k)
         if ARD:
             second_moment = (self.weight_vars[:, k] + self.weight_means[:, k] **2) @ self.pi[k]
-            
             alpha = self.alpha0 + 0.5
             beta = self.beta0 + second_moment / 2 * self.prior_component_precision[k]
             self.prior_precision[:, k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
@@ -102,20 +104,19 @@ class MVNFactorSER:
             #alpha = self.alpha0_component + self.dims['T'] / 2
             #beta = np.sum(second_moment / 2 * self.prior_precision[:, k]) + self.beta0_component
             #self.prior_component_precision[k] = np.clip((alpha - 1) / beta, 1e-5, 1e10)
-            
+
             #rebalance
             #z = np.log10(self.prior_component_precision[k])
             #self.prior_precision[:, k] = self.prior_entry_precision[:, k] * np.power(10.0, z)
             #self.prior_component_precision[k] /= np.power(10.0, z)
 
         for tissue in range(self.dims['T']):
-            precision = 1 + (1 / self.prior_variance()[tissue, k])
+            precision = np.diag(self.X) + (1 / self.prior_variance()[tissue, k])
             variance = 1 / precision
             mean = r_k[tissue] * variance
 
-            self.weight_vars[tissue, k] = variance * np.ones(self.dims['N'])
+            self.weight_vars[tissue, k] = variance
             self.weight_means[tissue, k] = mean
-        
 
     def update_weights(self, components=None, ARD=False):
         """
@@ -133,7 +134,6 @@ class MVNFactorSER:
 
     def _update_active_component_tissue(self, r_k, tissue, component):
         off = np.log(1 - self.prior_activity[component] + 1e-10)
-
         p = (self.pi[component] * self.weight_means[tissue, component])
         tmp1 = r_k[tissue] @ p
         tmp2  = -0.5 * (self.weight_means[tissue, component]**2 + self.weight_vars[tissue, component]) @ self.pi[component]
@@ -195,8 +195,10 @@ class MVNFactorSER:
         r_k = self.compute_residual(k)
 
         pi_k = (r_k * self.weight_means[:, k]
-                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k])
-                - normal_kl(self.weight_means[:, k], self.weight_vars[:, k], 0, self.prior_variance()[:, k][:, None] * np.ones_like(self.weight_vars[:, k]))
+                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * np.diag(self.X)[None]
+                - normal_kl(
+                    self.weight_means[:, k], self.weight_vars[:, k],
+                    0, self.prior_variance()[:, k][:, None] * np.ones_like(self.weight_vars[:, k]))
                 )
         pi_k = pi_k.T @ self.active[:, k]
 
