@@ -282,14 +282,13 @@ def plot_decomposed_zscores(self, tissues=None, components=None, thresh=0.9, sav
             ax[0, t].scatter(pos, self.Y[t], marker='x', c='k', alpha=0.5)
             ax[0, t].scatter(pos, pred[t], marker='o', c='r', alpha=0.5)
 
-    for k in components:
-        predk = self.compute_prediction_component(k)
-        predkt = predk[t]
-        if i == 0:
-            ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k], label='k{}'.format(k))
-        else:
-            ax[1, i].scatter(pos, predkt, marker='o', alpha=self.active[t, k])
-        fig.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3, ncol=(components.size)+2, borderaxespad=0.)
+        if component.size > 0:
+            for k in components:
+                predk = self.compute_prediction_component(k)
+                predkt = predk[t]
+                #ax[1, t].scatter(pos, predkt, marker='o', alpha=self.active[t, k], label='k{}'.format(k))
+                ax[1, t].scatter(pos, predkt, marker='o', alpha=self.active[t, k])
+                fig.legend(bbox_to_anchor=(0., 1.02, 1., .102), loc=3, ncol=(components.size)+2, borderaxespad=0.)
 
     plt.tight_layout()
     if save_path is not None:
