@@ -130,9 +130,9 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
 
 
     active_components = np.array([k for k in range(self.dims['K']) if pur[k] >= thresh])
-    vmax = np.abs(weights[:, active_components]).max()
-    vmin = -vmax
-    sns.heatmap(weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1], yticklabels=[], vmin=vmin, vmax=vmax)
+    if active_components.size == 0:
+        active_components = np.array([0])
+    sns.heatmap(weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1], yticklabels=[], center=0)
     ax[1].set_title('weights')
     ax[1].set_xlabel('component')
 
