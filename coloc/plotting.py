@@ -260,7 +260,7 @@ def plot_decomposed_zscores(self, tissues=None, components=None, thresh=0.9, sav
     """
     tissues = np.arange(self.dims['T'])
     cs, p = self.get_credible_sets()
-    components = np.array(k for k in range(self.dims['K']) if p[k] > 0.5)
+    components = np.array([k for k in range(self.dims['K']) if p[k] > 0.5])
 
     pred = self.compute_prediction()
     pos = np.arange(self.snp_ids.size)
