@@ -115,7 +115,7 @@ class CAFEH:
             #self.prior_component_precision[k] /= np.power(10.0, z)
 
         for tissue in range(self.dims['T']):
-            precision = np.diag(self.get_ld(tissue=tissue)) + (1 / self.prior_variance()[tissue, k])
+            precision = np.diag(self.get_cov(tissue=tissue)) + (1 / self.prior_variance()[tissue, k])
             variance = 1 / precision
             mean = r_k[tissue] * variance
 
@@ -199,7 +199,7 @@ class CAFEH:
         r_k = self.compute_residual(k)
 
         pi_k = (r_k * self.weight_means[:, k]
-                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * self.get_diag()
+                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * get_diag(self.X)()
                 - normal_kl(
                     self.weight_means[:, k], self.weight_vars[:, k],
                     0, self.prior_variance()[:, k][:, None] * np.ones_like(self.weight_vars[:, k]))
@@ -267,7 +267,7 @@ class CAFEH:
             expected_conditional += np.inner(self.Y[tissue], p)
 
             z = self.pi * self.weight_means[tissue] #* self.active[tissue]
-            z = z @ self.get_ld(tissue=tissue) @ z.T
+            z = z @ self.get_cov(tissue=tissue) @ z.T
             z = z - np.diag(np.diag(z))
             expected_conditional += -0.5 * z.sum()
             expected_conditional += -0.5 * ((self.weight_means[tissue] ** 2 + self.weight_vars[tissue]) * self.pi).sum()
@@ -293,13 +293,20 @@ class CAFEH:
         this function gives a common interface to
         (tisse, snp, snp) and (snp, snp) ld
         """
+        cov = self.get_cov(tissue=tissue, snps=snps)
+        sqrt_diag = get_diag(cov)
+        import pdb; pdb.set_trace()
+        return np.squeeze(self.X[tissue][..., snps, :][..., snps])
+
+    def get_cov(self, tissue=None, snps=None):
+        """
+        get ld matrix
+        this function gives a common interface to
+        (tisse, snp, snp) and (snp, snp) ld
+        """
         if np.ndim(self.X) == 2:
             tissue = None
         return np.squeeze(self.X[tissue][..., snps, :][..., snps])
-
-    def get_diag(self):
-        return np.atleast_2d(np.squeeze(
-            np.array([np.diag(X) for X in np.atleast_3d(self.X)])))
 
     def sort_components(self):
         """
@@ -328,3 +335,7 @@ class CAFEH:
             self.__dict__['X'] = X
             self.__dict__['Y'] = Y
 
+
+def get_diag(X):
+    return np.atleast_2d(np.squeeze(
+        np.array([np.diag(x) for x in np.atleast_3d(X)])))
