@@ -199,7 +199,7 @@ class CAFEH:
         r_k = self.compute_residual(k)
 
         pi_k = (r_k * self.weight_means[:, k]
-                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * get_diag(self.X)()
+                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * get_diag(self.X)
                 - normal_kl(
                     self.weight_means[:, k], self.weight_vars[:, k],
                     0, self.prior_variance()[:, k][:, None] * np.ones_like(self.weight_vars[:, k]))
