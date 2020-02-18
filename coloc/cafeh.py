@@ -296,7 +296,7 @@ class CAFEH:
         cov = self.get_cov(tissue=tissue, snps=snps)
         ld = []
         for c in np.atleast_3d(cov):
-            std = np.diag(c)
+            std = np.sqrt(np.diag(c))
             ld.append(c / np.outer(std, std))
         return np.squeeze(ld)
 
