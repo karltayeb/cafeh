@@ -115,7 +115,7 @@ class CAFEH:
             #self.prior_component_precision[k] /= np.power(10.0, z)
 
         for tissue in range(self.dims['T']):
-            precision = np.diag(self.get_ld(tissue)) + (1 / self.prior_variance()[tissue, k])
+            precision = np.diag(self.get_ld(tissue=tissue)) + (1 / self.prior_variance()[tissue, k])
             variance = 1 / precision
             mean = r_k[tissue] * variance
 
