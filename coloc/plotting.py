@@ -95,10 +95,13 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
     snps = np.concatenate(snps)
     
     fig, ax = plt.subplots(1, figsize=(6, 5))
-    ld = self.get_ld(snps)
-    sns.heatmap(ld,
-        cmap='RdBu_r', vmin=-1, vmax=1, ax=ax, square=True, annot=False, cbar=True,
-        yticklabels=self.snp_ids[snps], xticklabels=[])
+    ld = self.get_ld(snps=snps)
+    r2 = np.atleast_3d(ld ** 2).mean(0)
+    sns.heatmap(
+        r2, cmap='RdBu_r', vmin=0, vmax=1, ax=ax,
+        square=True, annot=False, cbar=True,
+        yticklabels=self.snp_ids[snps], xticklabels=[]
+    )
     ax.hlines(np.cumsum(sizes), *ax.get_xlim(), colors='w', lw=3)
     ax.vlines(np.cumsum(sizes), *ax.get_ylim(), colors='w', lw=3)
     plt.title('alpha={} confidence set LD'.format(alpha))
