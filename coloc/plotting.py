@@ -96,7 +96,7 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
     
     fig, ax = plt.subplots(1, figsize=(6, 5))
     ld = self.get_ld(snps=snps)
-    r2 = np.atleast_3d(ld ** 2).mean(0)
+    r2 = np.atleast_3d(ld ** 2).min(0)
     sns.heatmap(
         r2, cmap='RdBu_r', vmin=0, vmax=1, ax=ax,
         square=True, annot=False, cbar=True,
