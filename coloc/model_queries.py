@@ -50,6 +50,7 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
             if ld.shape[0] == 1:
                 purity = 1.0
             else:
+                import pdb; pdb.set_trace()
                 purity = np.abs(ld[np.tril_indices(ld.shape[0], -1)]).min()
         purities[key] = purity
 
