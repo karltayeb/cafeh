@@ -295,6 +295,9 @@ class CAFEH:
         """
         cov = self.get_cov(tissue=tissue, snps=snps)
         sqrt_diag = get_diag(cov)
+        np.atleast_3d(cov) / np.array([
+                np.outer(x, x) for x in np.atleast_2d(sqrt_diag)
+            ])
         import pdb; pdb.set_trace()
         return np.squeeze(self.X[tissue][..., snps, :][..., snps])
 
