@@ -294,12 +294,12 @@ class CAFEH:
         (tisse, snp, snp) and (snp, snp) ld
         """
         cov = self.get_cov(tissue=tissue, snps=snps)
-        sqrt_diag = get_diag(cov)
-        np.atleast_3d(cov) / np.array([
-                np.outer(x, x) for x in np.atleast_2d(sqrt_diag)
+        stdev = get_diag(cov)
+        ld = np.atleast_3d(cov) / np.array([
+                np.outer(x, x) for x in np.atleast_2d(stdev)
             ])
         import pdb; pdb.set_trace()
-        return np.squeeze(self.X[tissue][..., snps, :][..., snps])
+        return np.squeeze(ld)
 
     def get_cov(self, tissue=None, snps=None):
         """
