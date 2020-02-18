@@ -11,7 +11,7 @@ from .utils import np_cache_class, gamma_logpdf
 from functools import lru_cache
 import time
 
-class MVNFactorSER:
+class CAFEH:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, check_convergence, get_expected_weights
 
