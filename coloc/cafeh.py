@@ -68,7 +68,11 @@ class MVNFactorSER:
 
     @np_cache_class()
     def _compute_prediction_component(self, active, pi, weights):
-        return active[:, None] * (pi * weights) @ self.X
+        if np.ndim(self.X) == 2:
+            return active[:, None] * (pi * weights) @ self.X
+        else:
+            return active[:, None] * np.einsum(
+                'tn, tnm->tm', (pi * weights), self.X)
 
     def compute_prediction_component(self, k):
         active= self.active[:, k]
