@@ -54,7 +54,7 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
             else:
                 purity = np.max([
                     np.abs(x[np.tril_indices(x.shape[0], -1)]).min()
-                    for x in np.atleast_3d(ld)
+                    for x in np.atleast_3d(ld).T
                 ])
         purities[key] = purity
 
