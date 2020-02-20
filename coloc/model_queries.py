@@ -52,7 +52,7 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
             if ld.shape[0] == 1:
                 purity = 1.0
             else:
-                if np.ndims(ld) == 2:
+                if np.ndim(ld) == 2:
                     ld = ld[None]
                 purity = np.max([
                     np.abs(x[np.tril_indices(x.shape[0], -1)]).min()
