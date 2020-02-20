@@ -20,7 +20,7 @@ def get_expected_weights(self):
     else:
         weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
     return weights
-    
+
 def get_top_snp_per_component(self):
     """
     returns snp with highest posterior probability for each component
@@ -52,9 +52,11 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
             if ld.shape[0] == 1:
                 purity = 1.0
             else:
+                if np.ndims(ld) == 2:
+                    ld = ld[None]
                 purity = np.max([
                     np.abs(x[np.tril_indices(x.shape[0], -1)]).min()
-                    for x in np.atleast_3d(ld).T
+                    for x in ld
                 ])
         purities[key] = purity
 
