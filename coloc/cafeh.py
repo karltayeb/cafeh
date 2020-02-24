@@ -202,23 +202,6 @@ class CAFEH:
         pi_k = pi_k / pi_k.sum()
         self.pi.T[:, k] = pi_k
 
-    def _update_pi_component(self, k, ARD=False):
-        # compute residual
-        r_k = self.compute_residual(k)
-
-        pi_k = (r_k * self.weight_means[:, k]
-                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * np.diag(self.X)[None]
-                - normal_kl(
-                    self.weight_means[:, k], self.weight_vars[:, k],
-                    0, self.prior_variance()[:, k][:, None] * np.ones_like(self.weight_vars[:, k]))
-                )
-        pi_k = pi_k.T @ self.active[:, k]
-
-        # normalize to probabilities
-        pi_k = np.exp(pi_k - pi_k.max())
-        pi_k = pi_k / pi_k.sum()
-        self.pi.T[:, k] = pi_k
-
     def update_pi(self, components=None):
         """
         update pi
