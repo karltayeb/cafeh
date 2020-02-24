@@ -105,15 +105,6 @@ class CAFEH:
             beta = self.beta0 + second_moment / 2 * self.prior_component_precision[k]
             self.prior_precision[:, k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
 
-            #alpha = self.alpha0_component + self.dims['T'] / 2
-            #beta = np.sum(second_moment / 2 * self.prior_precision[:, k]) + self.beta0_component
-            #self.prior_component_precision[k] = np.clip((alpha - 1) / beta, 1e-5, 1e10)
-
-            #rebalance
-            #z = np.log10(self.prior_component_precision[k])
-            #self.prior_precision[:, k] = self.prior_entry_precision[:, k] * np.power(10.0, z)
-            #self.prior_component_precision[k] /= np.power(10.0, z)
-
         for tissue in range(self.dims['T']):
             precision = np.diag(self.get_cov(tissue=tissue)) + (1 / self.prior_variance()[tissue, k])
             variance = 1 / precision
@@ -200,6 +191,23 @@ class CAFEH:
 
         pi_k = (r_k * self.weight_means[:, k]
                 - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * get_diag(self.X)
+                - normal_kl(
+                    self.weight_means[:, k], self.weight_vars[:, k],
+                    0, self.prior_variance()[:, k][:, None] * np.ones_like(self.weight_vars[:, k]))
+                )
+        pi_k = pi_k.T @ self.active[:, k]
+
+        # normalize to probabilities
+        pi_k = np.exp(pi_k - pi_k.max())
+        pi_k = pi_k / pi_k.sum()
+        self.pi.T[:, k] = pi_k
+
+    def _update_pi_component(self, k, ARD=False):
+        # compute residual
+        r_k = self.compute_residual(k)
+
+        pi_k = (r_k * self.weight_means[:, k]
+                - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * np.diag(self.X)[None]
                 - normal_kl(
                     self.weight_means[:, k], self.weight_vars[:, k],
                     0, self.prior_variance()[:, k][:, None] * np.ones_like(self.weight_vars[:, k]))
@@ -339,5 +347,7 @@ class CAFEH:
 
 
 def get_diag(X):
-    return np.atleast_2d(np.squeeze(
-        np.array([np.diag(x) for x in np.atleast_3d(X)])))
+    if np.ndim(X) == 2:
+        return np.diag(X)[None]
+    else:
+        return np.array([np.diag(x) for x in X])
