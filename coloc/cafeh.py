@@ -66,7 +66,7 @@ class CAFEH:
         """
         return 1 / (self.prior_precision * self.prior_component_precision)
 
-    @np_cache_class()
+    @np_cache_class(maxsize=128)
     def _compute_prediction_component(self, active, pi, weights):
         if np.ndim(self.X) == 2:
             return active[:, None] * (pi * weights) @ self.X
@@ -74,11 +74,26 @@ class CAFEH:
             return active[:, None] * np.einsum(
                 'tn, tnm->tm', (pi * weights), self.X)
 
+    @lru_cache(maxsize=128)
+    def _compute_prediction_component_hash(self, k, hash):
+        active= self.active[:, k]
+        pi = self.pi[k]
+        weights = self.weight_means[:, k]
+        if np.ndim(self.X) == 2:
+            return active[:, None] * (pi * weights) @ self.X
+        else:
+            return active[:, None] * np.einsum(
+                'tn, tnm->tm', (pi * weights), self.X)
+
     def compute_prediction_component(self, k):
+        """
         active= self.active[:, k]
         pi = self.pi[k]
         weights = self.weight_means[:, k]
         return self._compute_prediction_component(active, pi, weights)
+        """
+        h = list(self.pi[k] @ self.weight_means[:, k].T)
+        return self._compute_prediction_component_hash(k, h)
 
     def compute_prediction(self, k=None):
         prediction = np.zeros_like(self.Y)

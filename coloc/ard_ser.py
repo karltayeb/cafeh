@@ -245,10 +245,6 @@ class MVNFactorSER:
         if verbose:
             print('cumulative run time: {}'.format(self.run_time))
 
-    def forward_fit(self, max_iter=1000, verbose=False, update_weights=True, update_active=True, update_pi=True, ARD_weights=False, ARD_active=False):
-        for k in range(self.dims['K']):
-            self.fit(max_iter, verbose, np.arange(k), update_weights, update_active, update_pi, ARD_weights, ARD_active)
-
     def compute_elbo(self, active=None):
         bound = 0 
         if active is None:
@@ -278,14 +274,20 @@ class MVNFactorSER:
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
-	
         # TODO ADD lnp(prior_weight_variance) + lnp(prior_slab_weights)
         # expected_conditional += gamma_logpdf(self.prior_component_precision, self.alpha0_component, self.beta0_component).sum()
         expected_conditional += gamma_logpdf(self.prior_precision, self.alpha0, self.beta0).sum()
         return expected_conditional - KL
 
-    def get_ld(self, snps):
-        return self.X[snps][:, snps]
+    def get_ld(self, tissue=None, snps=None):
+        """
+        get ld matrix
+        this function gives a common interface to
+        (tisse, snp, snp) and (snp, snp) ld
+        """
+        if np.ndim(self.X) == 2:
+            tissue = None
+        return np.squeeze(self.X[tissue][..., snps, :][..., snps])
 
     def sort_components(self):
         """
