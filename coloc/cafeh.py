@@ -92,7 +92,7 @@ class CAFEH:
         weights = self.weight_means[:, k]
         return self._compute_prediction_component(active, pi, weights)
         """
-        h = list(self.pi[k] @ self.weight_means[:, k].T)
+        h = (self.pi[k] @ self.weight_means[:, k].T).tobytes()
         return self._compute_prediction_component_hash(k, h)
 
     def compute_prediction(self, k=None):
