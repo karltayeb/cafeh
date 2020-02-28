@@ -3,7 +3,7 @@ import numpy as np
 from scipy.special import gamma
 
 def gamma_logpdf(x, alpha, beta):
-    alpha * np.log(beta) - gamma(alpha) + (alpha - 1) * np.log(x) - beta * x
+    return alpha * np.log(beta) - gamma(alpha) + (alpha - 1) * np.log(x) - beta * x
 
 def np_cache(*args, **kwargs):
     ''' LRU cache implementation for methods whose FIRST parameter is a numpy array
