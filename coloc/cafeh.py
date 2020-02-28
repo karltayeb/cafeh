@@ -99,6 +99,16 @@ class CAFEH:
 
     def _update_weight_component(self, k, ARD=False):
         r_k = self.compute_residual(k)
+        if ARD:
+            second_moment = (self.weight_vars[:, k] + self.weight_means[:, k] **2) @ self.pi[k]
+            alpha = self.alpha0 + 0.5
+            beta = self.beta0 + second_moment / 2 * self.prior_component_precision[k]
+            self.prior_precision[:, k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
+            """
+            alpha = self.alpha0_component + self.dims['T'] / 2
+            beta = np.sum(second_moment / 2 * self.prior_precision[:, k]) + self.beta0_component
+            self.prior_component_precision[k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
+            """
         for tissue in range(self.dims['T']):
             precision = np.diag(self.get_cov(tissue=tissue)) + (1 / self.prior_variance()[tissue, k])
             variance = 1 / precision
@@ -106,18 +116,6 @@ class CAFEH:
 
             self.weight_vars[tissue, k] = variance
             self.weight_means[tissue, k] = mean
-            
-        if ARD:
-            second_moment = (self.weight_vars[:, k] + self.weight_means[:, k] **2) @ self.pi[k]
-            alpha = self.alpha0 + 0.5
-            beta = self.beta0 + second_moment / 2 * self.prior_component_precision[k]
-            self.prior_precision[:, k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
-
-            alpha = self.alpha0_component + self.dims['T'] / 2
-            beta = np.sum(second_moment / 2 * self.prior_precision[:, k]) + self.beta0_component
-            self.prior_component_precision[k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
-
-
 
     def update_weights(self, components=None, ARD=False):
         """
