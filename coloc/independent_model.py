@@ -51,6 +51,8 @@ class IndependentFactorSER:
 
         if self.covariates is not None:
             self.cov_weights = {tissue: np.zeros((covariates[tissue].shape[0])) for tissue in self.tissue_ids}
+            self.sample_covariate_map = {tissue: np.isin(
+                self.sample_ids, self.covariates[tissue].columns) for tissue in self.tissue_ids}
         else:
             self.cov_weights = None
 
@@ -122,7 +124,7 @@ class IndependentFactorSER:
         prediction = np.zeros_like(self.Y)
         if (self.covariates is not None) and compute:
             for i, tissue in enumerate(self.tissue_ids):
-                prediction[i, np.isin(self.sample_ids, self.covariates[tissue].columns)] = \
+                prediction[i, self.sample_covariate_map[tissue]] = \
                     self.cov_weights[tissue] @ self.covariates[tissue].values
         return prediction
 
