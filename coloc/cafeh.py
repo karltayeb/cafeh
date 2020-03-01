@@ -199,7 +199,7 @@ class CAFEH:
                 # if update_active: self._update_active_component(l, ARD=ARD_active)
                 residual = residual + self.compute_prediction_component(l)
 
-            self.elbos.append(self.compute_elbo(residual=residual))
+            self.elbos.append(self.compute_elbo())
             if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
 
             cur_time = time.time()
@@ -216,7 +216,7 @@ class CAFEH:
         for k in range(self.dims['K']):
             self.fit(max_iter, verbose, np.arange(k), update_weights, update_active, update_pi, ARD_weights, ARD_active)
 
-    def compute_elbo(self, active=None, residual=None):
+    def compute_elbo(self, active=None):
         bound = 0 
         if active is None:
             active = self.active
