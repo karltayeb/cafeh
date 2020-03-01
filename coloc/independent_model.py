@@ -126,8 +126,9 @@ class IndependentFactorSER:
         prediction = self.compute_prediction(k, use_covariates)
         return self.Y - prediction
 
-    def _compute_ERSS(self, precomputed_residual=None):
-        residual = self.compute_residual()
+    def _compute_ERSS(self, residual=None):
+        if residual is None:
+            residual = self.compute_residual()
         ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2) for tissue in range(self.dims['T'])])
         for k in range(self.dims['K']):
             #mu = np.array([self._compute_first_moment(t, k) for t in range(self.dims['T'])])
@@ -145,12 +146,15 @@ class IndependentFactorSER:
         X = self.covariates[tissue].values
         self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
 
-    def _update_pi_component(self, k, precomputed_residual=None):
+    def _update_pi_component(self, k, residual=None):
         """
         update pi for a single component
         """
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
-        r_k = self.compute_residual(k)
+        if residual is None:
+            r_k = self.compute_residual(k)
+        else:
+            r_k = residual
 
         # 0 out nans
         r_k[np.isnan(self.Y)] = 0
@@ -170,7 +174,7 @@ class IndependentFactorSER:
 
         self.pi[k] = pi_k
 
-    def _update_weight_component(self, k, ARD=True, precomputed_residual=None):
+    def _update_weight_component(self, k, ARD=True, residual=None):
         """
         update weights for a component
         """
@@ -182,7 +186,10 @@ class IndependentFactorSER:
         
         mask = np.isnan(self.Y)
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
-        r_k = self.compute_residual(k)
+        if residual is None:
+            r_k = self.compute_residual(k)
+        else:
+            r_k = residual
         r_k[mask] = 0
         
         precision = (diag / self.tissue_variance[:, None]) + (1 / self.prior_variance()[:, k])[:, None]
@@ -281,17 +288,22 @@ class IndependentFactorSER:
         if components is None:
             components = np.arange(self.dims['K'])
 
+        residual = self.compute_residual(use_covariates=True)
         for i in range(max_iter):
             # update covariate weights
+            residual += self._compute_covariate_prediction(True)
             if (self.covariates is not None) and update_covariate_weights:
                 self.update_covariate_weights()
+            residual -= self._compute_covariate_prediction(True)
 
             # update component parameters
             for l in components:
-                if update_weights: self._update_weight_component(l, ARD=ARD_weights)        
-                if update_pi: self._update_pi_component(l)
-                if update_active: self._update_active_component(l, ARD=ARD_active)
-            
+                residual = residual + self.compute_first_moment(l)
+                if update_weights: self._update_weight_component(l, ARD=ARD_weights, residual=residual)        
+                if update_pi: self._update_pi_component(l, residual=residual)
+                # if update_active: self._update_active_component(l, ARD=ARD_active)
+                residual = residual - self.compute_first_moment(l)
+
             # update variance parameters
             if update_variance: self._update_tissue_variance()
 
