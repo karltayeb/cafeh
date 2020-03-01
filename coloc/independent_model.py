@@ -262,9 +262,10 @@ class IndependentFactorSER:
 
             self.active[tissue, k] = np.clip(1 / (1 + np.exp(-(on - off))), 1e-5, 1-1e-5)
 
-    def _update_tissue_variance(self, precomputed_residual=None):
-        residual = precomputed_residual if (precomputed_residual is not None) else self.compute_residual()
-        ERSS = self._compute_ERSS()
+    def _update_tissue_variance(self, residual=None):
+        if residual is None:
+            residual = self.compute_residual()
+        ERSS = self._compute_ERSS(residual=residual)
         self.tissue_variance = ERSS / np.array([self._get_mask(t).sum() for t in range(self.dims['T'])])
 
     def update_covariate_weights(self):
@@ -323,10 +324,10 @@ class IndependentFactorSER:
                 residual = residual - self.compute_first_moment(l)
 
             # update variance parameters
-            if update_variance: self._update_tissue_variance()
+            if update_variance: self._update_tissue_variance(residual=residual)
 
             # monitor convergence with ELBO
-            self.elbos.append(self.compute_elbo())
+            self.elbos.append(self.compute_elbo(residual=residual))
             if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
 
             cur_time = time.time()
@@ -343,7 +344,7 @@ class IndependentFactorSER:
         for k in range(self.dims['K']):
             self.fit(max_iter, verbose, np.arange(k), update_weights, update_active, update_pi, ARD_weights, ARD_active)
 
-    def compute_elbo(self, precomputed_residual=None):
+    def compute_elbo(self, residual=None):
         """
         copute evidence lower bound
         """
@@ -353,7 +354,7 @@ class IndependentFactorSER:
 
         # compute expected conditional log likelihood E[ln p(Y | X, Z)]
         # compute expected conditional log likelihood E[ln p(Y | X, Z)]
-        ERSS = self._compute_ERSS(precomputed_residual=precomputed_residual)
+        ERSS = self._compute_ERSS(residual=residual)
         for tissue in range(self.dims['T']):
             mask = self._get_mask(tissue)
             expected_conditional += -0.5 * mask.sum() * np.log(2 * np.pi * self.tissue_variance[tissue]) \
