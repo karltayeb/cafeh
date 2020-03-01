@@ -78,14 +78,30 @@ class IndependentFactorSER:
     def _compute_first_moment(self, pi, weight, active):
         return (pi * weight * active) @ self.X
 
-    def compute_first_moment(self, component):
+    @lru_cache
+    def _compute_first_moment_hash(self, component, hash):
         pi = self.pi[component]
         weight = self.weight_means[:, component]
         active = self.active[:, component][:, None]
         return self._compute_first_moment(pi, weight, active)
 
+    def compute_first_moment(self, component):
+        pi = self.pi[component]
+        weight = self.weight_means[:, component]
+        active = self.active[:, component][:, None]
+        h = (pi @ weight.T).tobytes()
+        return self._compute_first_moment_hash(component, h)
+
     @np_cache_class(maxsize=2**5)
     def _compute_second_moment(self, pi, weight, var, active):
+        return (pi * (weight**2 + var) * active) @ self.X**2
+
+    @lru_cache(maxsize=2**5)
+    def _compute_second_moment_hash(self, component, hash):
+        pi = self.pi[component]
+        weight = self.weight_means[:, component]
+        var = self.weight_vars[:, component]
+        active = self.active[:, component][:, None]
         return (pi * (weight**2 + var) * active) @ self.X**2
 
     def compute_second_moment(self, component):
@@ -93,7 +109,9 @@ class IndependentFactorSER:
         weight = self.weight_means[:, component]
         var = self.weight_vars[:, component]
         active = self.active[:, component][:, None]
-        return self._compute_second_moment(pi, weight, var, active)
+
+        h = (pi @ (weight + var**2).T).tobytes()
+        return self._compute_second_moment_hash(component, h)
 
     def _compute_covariate_prediction(self, compute=True):
         """
