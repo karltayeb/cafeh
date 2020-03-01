@@ -112,8 +112,11 @@ class CAFEH:
         residual = self.Y - prediction
         return residual
 
-    def _update_weight_component(self, k, ARD=False):
-        r_k = self.compute_residual(k)
+    def _update_weight_component(self, k, ARD=False, residual=None):
+        if residual is None:
+            r_k = self.compute_residual(k)
+        else:
+            r_k = residual
         if ARD:
             second_moment = (self.weight_vars[:, k] + self.weight_means[:, k] **2) @ self.pi[k]
             alpha = self.alpha0 + 0.5
@@ -146,67 +149,11 @@ class CAFEH:
         for k in components:
             self._update_weight_component(k, ARD=ARD)
 
-    def _update_active_component_tissue(self, r_k, tissue, component):
-        off = np.log(1 - self.prior_activity[component] + 1e-10)
-        p = (self.pi[component] * self.weight_means[tissue, component])
-        tmp1 = r_k[tissue] @ p
-        tmp2  = -0.5 * (self.weight_means[tissue, component]**2 + self.weight_vars[tissue, component]) @ self.pi[component]
-        tmp3 = -1 * normal_kl(
-            self.weight_means[tissue, component], self.weight_vars[tissue, component],
-            0, self.prior_variance[tissue, component]) @ self.pi[component]
-        on = tmp1 + tmp2 + tmp3 + np.log(self.prior_activity[component] + 1e-10)
-        self.active[tissue, component] = 1 / (1 + np.exp(-(on - off)))
-
-    def _update_active_component(self, k, ARD=False):
-        if ARD:
-            a = self.active[:, k].sum() + 1
-            b = 1 - self.active[:, k].sum() + self.dims['T']
-            self.prior_activity[k] = (a - 1) / (a + b - 2)
-        r_k = self.compute_residual(k)
-        for t in range(self.dims['T']):
-            self._update_active_component_tissue(r_k, t, k)
-
-    def _update_active_component2(self, k, ARD=False):
-        if ARD:
-            a = self.active[:, k].sum() + 1
-            b = 1 - self.active[:, k].sum() + self.dims['T']
-            self.prior_activity[k] = (a - 1) / (a + b - 2)
-        r_k = self.compute_residual(k)
-
-        off = np.log(1 - self.prior_activity[component] + 1e-10)
-        p = (self.pi[component][:, None] * self.weight_means[:, component])
-        tmp1 = r_k @ p
-        tmp2  = -0.5 * (self.weight_means[:, component]**2 + self.weight_vars[:, component]) @ self.pi[component]
-        tmp3 = -1 * normal_kl(
-            self.weight_means[:, component], self.weight_vars[:, component],
-            0, self.prior_variance[:, component]) @ self.pi[component]
-        on = tmp1 + tmp2 + tmp3 + np.log(self.prior_activity[component] + 1e-10)
-        self.active[:, component] = 1 / (1 + np.exp(-(on - off)))
-
-    def update_active(self, components=None, ARD=False):
-        """
-        X is LD/Covariance Matrix
-        Y is T x N
-        weights  T x K matrix of weight parameters
-        active T x K active[t, k] = logp(s_tk = 1)
-        prior_activitiy
-        """
-        if components is None:
-            components = np.arange(self.dims['K'])
-
-        for k in components:
-            self._update_active_component(k, ARD=ARD)
-
-    def update_active2(self, components=None, ARD=False):
-        if components is None:
-            components = np.arange(self.dims['K'])
-
-        for k in components:
-            self._update_active_component(k, ARD=ARD)
-
-    def _update_pi_component(self, k, ARD=False):
-        # compute residual
-        r_k = self.compute_residual(k)
+    def _update_pi_component(self, k, ARD=False, residual=None):
+        if residual is None:
+            r_k = self.compute_residual(k)
+        else:
+            r_k = residual
 
         pi_k = (r_k * self.weight_means[:, k]
                 - 0.5 * (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * get_diag(self.X)
@@ -240,13 +187,19 @@ class CAFEH:
         if components is None:
             components = np.arange(self.dims['K'])
 
+        residual = self.compute_residual()
         for i in range(max_iter):
             for l in components:
-                if update_weights: self._update_weight_component(l, ARD=ARD_weights)        
-                if update_pi: self._update_pi_component(l)
-                if update_active: self._update_active_component(l, ARD=ARD_active)
+                residual = residual - self.compute_prediction_component(l)
+                if update_weights:
+                    self._update_weight_component(l, ARD=ARD_weights,
+                                                  residual=residual)
+                if update_pi:
+                    self._update_pi_component(l, residual=residual)
+                # if update_active: self._update_active_component(l, ARD=ARD_active)
+                residual = residual + self.compute_prediction_component(l)
 
-            self.elbos.append(self.compute_elbo())
+            self.elbos.append(self.compute_elbo(residual=residual))
             if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
 
             cur_time = time.time()
@@ -263,7 +216,7 @@ class CAFEH:
         for k in range(self.dims['K']):
             self.fit(max_iter, verbose, np.arange(k), update_weights, update_active, update_pi, ARD_weights, ARD_active)
 
-    def compute_elbo(self, active=None):
+    def compute_elbo(self, active=None, residual=None):
         bound = 0 
         if active is None:
             active = self.active
