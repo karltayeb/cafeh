@@ -78,7 +78,7 @@ class IndependentFactorSER:
     def _compute_first_moment(self, pi, weight, active):
         return (pi * weight * active) @ self.X
 
-    @lru_cache
+    @lru_cache()
     def _compute_first_moment_hash(self, component, hash):
         pi = self.pi[component]
         weight = self.weight_means[:, component]
