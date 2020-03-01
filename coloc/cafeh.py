@@ -190,14 +190,14 @@ class CAFEH:
         residual = self.compute_residual()
         for i in range(max_iter):
             for l in components:
-                residual = residual - self.compute_prediction_component(l)
+                residual = residual + self.compute_prediction_component(l)
                 if update_weights:
                     self._update_weight_component(l, ARD=ARD_weights,
                                                   residual=residual)
                 if update_pi:
                     self._update_pi_component(l, residual=residual)
                 # if update_active: self._update_active_component(l, ARD=ARD_active)
-                residual = residual + self.compute_prediction_component(l)
+                residual = residual - self.compute_prediction_component(l)
 
             self.elbos.append(self.compute_elbo())
             if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
