@@ -162,7 +162,7 @@ class IndependentFactorSER:
 
     def _update_covariate_weights_tissue(self, residual, tissue):
         weights = np.zeros_like(self.cov_weights[tissue])
-        Y = np.squeeze(residual[self.tissue_ids == tissue, np.isin(self.sample_ids, self.covariates[tissue].columns)])
+        Y = np.squeeze(residual[self.tissue_ids == tissue, self.sample_covariate_map[tissue]])
         X = self.covariates[tissue].values
         self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
 

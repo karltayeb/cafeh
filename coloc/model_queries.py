@@ -34,9 +34,8 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
     thresh is a threshold on the 
     """
     credible_sets = {}
-    active = self.active.max(0) > thresh
     credible_set_idx = {}
-    for k in np.arange(self.dims['K'])[active]:
+    for k in np.arange(self.dims['K']):
         cset_size = (np.cumsum(np.flip(np.sort(self.pi.T[:, k]))) < alpha).sum() + 1
         cset = np.flip(np.argsort(self.pi.T[:, k])[-cset_size:])
         credible_sets[k] = self.snp_ids[cset]

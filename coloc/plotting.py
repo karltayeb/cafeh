@@ -96,7 +96,42 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
     
     fig, ax = plt.subplots(1, figsize=(6, 5))
     ld = self.get_ld(snps=snps)
-    r2 = np.atleast_3d(ld ** 2).min(0)
+    if np.ndim(ld) == 2:
+        ld = ld ** 2
+    else:
+        ld = (ld ** 2).min(0)
+    sns.heatmap(
+        ld, cmap='RdBu_r', center=0, ax=ax,
+        square=True, annot=False, cbar=True,
+        yticklabels=self.snp_ids[snps], xticklabels=[]
+    )
+    ax.hlines(np.cumsum(sizes), *ax.get_xlim(), colors='w', lw=3)
+    ax.vlines(np.cumsum(sizes), *ax.get_ylim(), colors='w', lw=3)
+    plt.title('alpha={} confidence set LD'.format(alpha))
+    if save_path is not None:
+        plt.savefig(save_path)
+    if show:
+        plt.show()
+    plt.close()
+
+def plot_credible_sets_r2(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
+    if snps is None:
+        snps = []
+    credible_sets, purity = self.get_credible_sets(alpha=alpha)
+    for k in np.arange(self.dims['K']):
+        if purity[k] > thresh:
+            cset = np.arange(self.dims['N'])[np.isin(self.snp_ids, credible_sets[k])]
+            snps.append(cset)
+
+    sizes = np.array([x.size for x in snps])
+    snps = np.concatenate(snps)
+    
+    fig, ax = plt.subplots(1, figsize=(6, 5))
+    ld = self.get_ld(snps=snps)
+    if np.ndim(ld) == 2:
+        r2 = ld ** 2
+    else:
+        r2 = (ld ** 2).min(0)
     sns.heatmap(
         r2, cmap='RdBu_r', vmin=0, vmax=1, ax=ax,
         square=True, annot=False, cbar=True,
