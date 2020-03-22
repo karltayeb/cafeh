@@ -4,7 +4,7 @@ from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
 from .utils import np_cache_class, gamma_logpdf
-from functools import lru_cache, cached_property
+from functools import lru_cache
 import time
 
 class IndependentFactorSER:
@@ -87,11 +87,11 @@ class IndependentFactorSER:
         active = self.active[:, component][:, None]
         return self._compute_first_moment(pi, weight, active)
 
-    @cached_property
+    @property
     def credible_sets(self):
         self.get_credible_sets()[0]
 
-    @cached_property
+    @property
     def purity(self):
         self.get_credible_sets()[1]
 
