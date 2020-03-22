@@ -89,11 +89,11 @@ class IndependentFactorSER:
 
     @property
     def credible_sets(self):
-        self.get_credible_sets()[0]
+        return self.get_credible_sets()[0]
 
     @property
     def purity(self):
-        self.get_credible_sets()[1]
+        return self.get_credible_sets()[1]
 
     def compute_first_moment(self, component):
         pi = self.pi[component]
