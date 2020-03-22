@@ -4,7 +4,7 @@ from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl
 import os, sys, pickle
 from scipy.optimize import minimize_scalar
 from .utils import np_cache_class, gamma_logpdf
-from functools import lru_cache
+from functools import lru_cache, cached_property
 import time
 
 class IndependentFactorSER:
@@ -86,6 +86,14 @@ class IndependentFactorSER:
         weight = self.weight_means[:, component]
         active = self.active[:, component][:, None]
         return self._compute_first_moment(pi, weight, active)
+
+    @cached_property
+    def credible_sets(self):
+        self.get_credible_sets()[0]
+
+    @cached_property
+    def purity(self):
+        self.get_credible_sets()[1]
 
     def compute_first_moment(self, component):
         pi = self.pi[component]
@@ -384,6 +392,25 @@ class IndependentFactorSER:
         return np.atleast_2d(np.corrcoef(self.X[snps.astype(int)]))
 
     def save(self, output_dir, model_name, save_data=False):
+        if not os.path.isdir(output_dir):
+            os.makedirs(output_dir)
+        if output_dir[-1] == '/':
+            output_dir = output_dir[:-1]
+
+        if not save_data:
+            X = self.__dict__.pop('X')
+            Y = self.__dict__.pop('Y')
+
+        pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
+        
+        if not save_data:
+            self.__dict__['X'] = X
+            self.__dict__['Y'] = Y
+
+    def save_json(self, json_path, save_data=False):
+        with gzip.GzipFile(json_path, 'w') as fout:
+            fout.write(json.dumps(self.__dict__).encode('utf-8'))
+
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
         if output_dir[-1] == '/':
