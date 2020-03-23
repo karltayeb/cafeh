@@ -44,7 +44,7 @@ def get_credible_sets(self, alpha=0.9, thresh=0.5):
     for key, snps in credible_set_idx.items():
         if snps.size == 1:
             purity = 1.0
-        elif snps.size > 100:
+        elif snps.size > 500:
             purity = 0.0
         else:
             ld = self.get_ld(snps=snps)
