@@ -73,17 +73,19 @@ def get_tissue_pip(self):
 
     return pd.DataFrame(pip, index=self.snp_ids, columns=self.tissue_ids)
 
-def get_pip(self):
+def get_pip(self, components=None):
     """
     return posterior inclusion probability for each SNP
     PIP is the probability that a SNP is the causal snp in at least one component in at least one tissue
     """
+    if components is None:
+        components = np.arange(self.dims['K'])
     pip = np.zeros(self.dims['N'])
     for n in range(self.dims['N']):
         pip[n] = 1 - np.exp(np.sum([np.log(1 - self.pi.T[n, k] * 
             (1 - np.exp(np.sum([np.log(1 - self.active[t, k]) 
                 for t in range(self.dims['T'])]))))
-        for k in range(self.dims['K'])]))
+        for k in components]))
     return pip
 
 def get_component_coloc(self):
