@@ -207,11 +207,11 @@ class IndependentFactorSER:
         update weights for a component
         """
         if ARD:
-            second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k] 
+            second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k]
             alpha = self.alpha0 + 0.5
             beta = self.beta0 + second_moment / 2
             self.prior_precision[:, k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
-        
+
         mask = np.isnan(self.Y)
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
         if residual is None:
@@ -219,7 +219,7 @@ class IndependentFactorSER:
         else:
             r_k = residual
         r_k[mask] = 0
-        
+
         precision = (diag / self.tissue_variance[:, None]) + (1 / self.prior_variance()[:, k])[:, None]
         variance = 1 / precision
         mean = (variance / self.tissue_variance[:, None]) * (r_k @ self.X.T)
@@ -234,25 +234,6 @@ class IndependentFactorSER:
             a = self.active[:, k].sum() + 1
             b = 1 - self.active[:, k].sum() + self.dims['T']
             self.prior_activity[k] = (a - 1) / (a + b - 2)
-
-        """
-        mask = ~np.isnan(self.Y)
-        diag = np.array([self._get_diag(k) for t in range(self.dims['T'])])
-        r_k = self.compute_residual(k)
-        r_k[mask] = 0
-        off = np.sum(norm.logpdf(x=r_k, loc=0.0, scale=np.sqrt(self.tissue_variance)[:, None])) \
-            + np.log(1 - self.prior_activity[k] + 1e-10)
-        tmpa = self.weight_means[:, k] * self.X
-        tmpa[mask] = 0
-        tmp1 = (-0.5 * np.log(2 * np.pi * self.tissue_variance) * mask.sum(1)) - 0.5 / self.tissue_variance *
-            ((r_k - tmpa) ** 2).sum(1)
-        tmp2 = (-0.5 / self.tissue_variance) * (self.weight_vars[:, k]) * diag
-        tmp3 = -1 * normal_kl(self.weight_means[:, k],
-                              self.weight_vars[:, k],
-                              0.0,
-                              self.prior_variance()[tissue, k])
-        on = np.inner(tmp1 + tmp2 + tmp3, self.pi[k]) + np.log(self.prior_activity[k] + 1e-10)
-        """
         self.active[tissue, k] = np.clip(1 / (1 + np.exp(-(on - off))), 1e-5, 1-1e-5)
 
         for tissue in range(self.dims['T']):
@@ -276,7 +257,8 @@ class IndependentFactorSER:
         if residual is None:
             residual = self.compute_residual()
         ERSS = self._compute_ERSS(residual=residual)
-        self.tissue_variance = ERSS / np.array([self._get_mask(t).sum() for t in range(self.dims['T'])])
+        self.tissue_variance = ERSS / np.array(
+            [self._get_mask(t).sum() for t in range(self.dims['T'])])
 
     def update_covariate_weights(self):
         if self.covariates is not None:
@@ -328,7 +310,8 @@ class IndependentFactorSER:
             # update component parameters
             for l in components:
                 residual = residual + self.compute_first_moment(l)
-                if update_weights: self._update_weight_component(l, ARD=ARD_weights, residual=residual)        
+                if update_weights: self._update_weight_component(
+                    l, ARD=ARD_weights, residual=residual)
                 if update_pi: self._update_pi_component(l, residual=residual)
                 # if update_active: self._update_active_component(l, ARD=ARD_active)
                 residual = residual - self.compute_first_moment(l)
@@ -338,7 +321,8 @@ class IndependentFactorSER:
 
             # monitor convergence with ELBO
             self.elbos.append(self.compute_elbo(residual=residual))
-            if verbose: print("Iter {}: {}".format(i, self.elbos[-1]))
+            if verbose:
+                print("Iter {}: {}".format(i, self.elbos[-1]))
 
             cur_time = time.time()
             if self.check_convergence():
@@ -371,7 +355,7 @@ class IndependentFactorSER:
                 -0.5 / self.tissue_variance[tissue] * ERSS[tissue]
         # KL(q(W | S) || p(W)) = KL(q(W | S = 1) || p(W)) q(S = 1) + KL(p(W) || p(W)) (1 - q(S = 1))
         KL += np.sum(
-            normal_kl(self.weight_means, self.weight_vars, 0, self.prior_variance()[..., None]) 
+            normal_kl(self.weight_means, self.weight_vars, 0, self.prior_variance()[..., None])
             * (self.active[..., None] * self.pi[None])
         )
 
@@ -380,8 +364,6 @@ class IndependentFactorSER:
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
         KL += np.sum(gamma_logpdf(self.prior_precision, self.alpha0, self.beta0))
-        #TODO ADD lnp(prior_weight_variance) + lnp(prior_slab_weights)
-
         return expected_conditional - KL
 
     def sort_components(self):
@@ -407,21 +389,3 @@ class IndependentFactorSER:
             self.__dict__['X'] = X
             self.__dict__['Y'] = Y
 
-    def save_json(self, json_path, save_data=False):
-        with gzip.GzipFile(json_path, 'w') as fout:
-            fout.write(json.dumps(self.__dict__).encode('utf-8'))
-
-        if not os.path.isdir(output_dir):
-            os.makedirs(output_dir)
-        if output_dir[-1] == '/':
-            output_dir = output_dir[:-1]
-
-        if not save_data:
-            X = self.__dict__.pop('X')
-            Y = self.__dict__.pop('Y')
-
-        pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
-        
-        if not save_data:
-            self.__dict__['X'] = X
-            self.__dict__['Y'] = Y
