@@ -1,4 +1,5 @@
 import numpy as np
+from scipy.special import loggamma, digamma
 
 def unit_normal_kl(mu_q, var_q):
     """
@@ -10,6 +11,16 @@ def unit_normal_kl(mu_q, var_q):
 def normal_kl(mu_q, var_q, mu_p, var_p):
     KL = 0.5 * (var_q / var_p + (mu_q - mu_p)**2 / var_p - 1 + 2 * np.log(np.sqrt(var_p) / np.sqrt(var_q)))
     return KL
+
+def gamma_kl(a_q, b_q, a_p, b_p):
+    KL = (a_q - a_p) * digamma(a_q) \
+        - loggamma(a_q) + loggamma(a_p) \
+        + a_p * (np.log(b_q) - np.log(b_p)) + a_q * (b_p - b_q) / b_q
+    return KL
+
+def normal_entropy(var):
+    entropy = (1 / 2) * np.log(2 * np.pi * var) + 1
+    return entropy
 
 def categorical_kl(pi_q, pi_p):
     """

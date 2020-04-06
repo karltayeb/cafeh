@@ -71,3 +71,8 @@ def array_to_hashable(*args):
 
 def hashable_to_array(hashable_tuple):
     return [np.frombuffer(a[0]).reshape(a[1]) for a in hashable_tuple]
+
+def assign(model, param_dict):
+    for key in model.__dict__:
+        if key in param_dict:
+            model.__dict__.
