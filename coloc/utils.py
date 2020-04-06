@@ -51,7 +51,6 @@ def pack(*args):
     return single flat numpy array
     return list of shape tuples for unpacking
     """
-    
     flat = np.concatenate([x.flatten() for x in args])
     size = [0]
     size.extend([x.size for x in args])
@@ -75,4 +74,4 @@ def hashable_to_array(hashable_tuple):
 def assign(model, param_dict):
     for key in model.__dict__:
         if key in param_dict:
-            model.__dict__.
+            model.__dict__[key] = param_dict[key]
