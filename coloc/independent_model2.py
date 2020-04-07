@@ -350,7 +350,7 @@ class IndependentFactorSER:
         copute evidence lower bound
         """
 
-        expected_joint = 0
+        expected_conditional = 0
         KL = 0
 
         E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
