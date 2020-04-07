@@ -371,7 +371,7 @@ class IndependentFactorSER:
         lik = np.sum(
             0.5 * np.log(2 * np.pi) + 0.5 * E_ln_alpha - 0.5 * E_alpha * E_w2
         )
-        entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
+        entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum()
         KL += lik + entropy
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
         KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
