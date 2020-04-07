@@ -290,8 +290,11 @@ class IndependentFactorSER:
         if residual is None:
             residual = self.compute_residual()
         ERSS = self._compute_ERSS(residual=residual)
-        self.tissue_variance = ERSS / np.array(
-            [self._get_mask(t).sum() for t in range(self.dims['T'])])
+
+        n_samples = np.array([self._get_mask(t).sum()
+            for t in range(self.dims['T'])])
+        self.tissue_precision_a = self.c + (n_samples + 1) / 2
+        self.tissue_precision_b = self.d + ERSS / 2
 
     def update_covariate_weights(self):
         if self.covariates is not None:
@@ -364,7 +367,6 @@ class IndependentFactorSER:
             expected_conditional += 0.5 * mask.sum() * np.log(2 * np.pi) \
                 + 0.5 * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
-
 
         # compute E[KL q(w | z) || p(w | alpha)]
         E_w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
