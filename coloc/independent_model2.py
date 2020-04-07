@@ -189,7 +189,7 @@ class IndependentFactorSER:
             residual = self.compute_residual()
         ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
             for tissue in range(self.dims['T'])])
-
+        prediction = self.compute_prediction(use_covariates=False)
         for t in range(self.dims['T']):
             mask = self._get_mask(t)
             diag = self._get_diag(t)
@@ -199,9 +199,7 @@ class IndependentFactorSER:
             var_pi = (self.weight_vars[t] * self.pi).sum(0)
 
             ERSS[t] += np.inner(diag, mu2_pi + var_pi + mu_pi)
-
-            tmp = mu_pi @ self.X[:, mask]
-            ERSS[t] -= np.inner(tmp, tmp)
+            ERSS[t] -= np.inner(prediction[t], prediction[t])
 
         """        
         for k in range(self.dims['K']):
