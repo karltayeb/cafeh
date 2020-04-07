@@ -257,14 +257,16 @@ class IndependentFactorSER:
             + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
         tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
 
-        # E[ln p(w | alpha)]
-        tmp2 = -0.5 * self.expected_weight_precision[:, k][:, None] * (
-            self.weight_means[:, k]**2 + self.weight_vars[:, k]
-        )
 
-        # H(q(w))
-        tmp3 = normal_entropy(self.weight_vars[:, k])
-        pi_k = (tmp1 + tmp2 + tmp3)
+        # E[ln p(w | alpha)] + H(q(w))
+        E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
+            - np.log(self.weight_precision_b[:, k])
+        E_alpha = self.expected_weight_precision[:, k]
+        E_w2 = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) 
+        lik = (0.5 * E_ln_alpha[:, None] - 0.5 * E_alpha[:, None] * E_w2)
+        entropy = (normal_entropy(model2.weight_vars[:, k]))
+
+        pi_k = (tmp1 + lik + entropy)
 
         pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
@@ -390,11 +392,11 @@ class IndependentFactorSER:
         expected_conditional = 0
         KL = 0
 
-        E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
         E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
-
-        E_tau = self.expected_tissue_precision
         E_alpha = self.expected_weight_precision
+
+        E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
+        E_tau = self.expected_tissue_precision
 
         ERSS = self._compute_ERSS(residual=residual)
         for tissue in range(self.dims['T']):
