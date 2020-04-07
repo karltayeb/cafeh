@@ -364,14 +364,15 @@ class IndependentFactorSER:
         ERSS = self._compute_ERSS(residual=residual)
         for tissue in range(self.dims['T']):
             mask = self._get_mask(tissue)
-            expected_conditional += 0.5 * mask.sum() * np.log(2 * np.pi) \
+            expected_conditional += \
+                - 0.5 * mask.sum() * np.log(2 * np.pi) \
                 + 0.5 * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
         # compute E[KL q(w | z) || p(w | alpha)]
         E_w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
         lik = np.sum(
-            0.5 * np.log(2 * np.pi) + 0.5 * E_ln_alpha - 0.5 * E_alpha * E_w2
+            -0.5 * np.log(2 * np.pi) + 0.5 * E_ln_alpha - 0.5 * E_alpha * E_w2
         )
         entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum()
         KL += lik + entropy
