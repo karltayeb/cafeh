@@ -193,11 +193,12 @@ class IndependentFactorSER:
 
         tmp1 = (-0.5 / self.tissue_variance[:, None]) * (
             - 2 * r_k @ (self.X.T) * self.weight_means[:, k]
-            + self.weight_means[:, k] ** 2 * diag
+            + (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * diag
         )
-        tmp2 = -0.5 * (1 / self.tissue_variance[:, None]) * (self.weight_vars[:, k]) * diag
-        tmp3 = -1 * normal_kl(self.weight_means[:, k], self.weight_vars[:, k], 0.0, self.prior_variance()[:, k][:, None])
-        pi_k = (tmp1 + tmp2 + tmp3) * self.active[:, k][:, None]
+        tmp2 = -1 * normal_kl(
+            self.weight_means[:, k], self.weight_vars[:, k],
+            0.0, (self.ard_precision_b[:, k] / self.ard_precision_a[:, k])[:, None])
+        pi_k = (tmp1 + tmp2)
 
         pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
