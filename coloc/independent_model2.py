@@ -219,7 +219,7 @@ class IndependentFactorSER:
         # E[ln p(y | w, z, alpha , tau)]
         tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
             + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
-        tmp1 = -0.5 * self.expected_tissue_precision[:, [k]] * tmp1
+        tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
 
         # E[ln p(w | alpha)]
         tmp2 = -0.5 * self.expected_weight_precision[:, k] * (
@@ -228,8 +228,6 @@ class IndependentFactorSER:
 
         # H(q(w))
         tmp3 = normal_entropy(self.weight_vars[:, k])
-
-        import pdb; pdb.set_trace()
         pi_k = (tmp1 + tmp2 + tmp3)
 
         pi_k = pi_k.sum(0)
