@@ -314,8 +314,8 @@ class IndependentFactorSER:
         # <ln p (w | alpha) > - <ln q(w)> - <ln q(w)>
         Elna = digamma(self.ard_precision_a) - np.log(self.ard_precision_b)  # [T, K]
         precision = self.expected_weight_precision()  # [T, K]
-        w2 = self.weight_means**2 + self.weight_vars  # [T, K, N]
-        entropy = normal_entropy(self.weight_vars)  # [T, K, N]
+        w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(2)  # [T, K, N]
+        entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum(2)  # [T, K, N]
         KL += np.sum(
             (precision[..., None] / 2) * w2 - entropy
         )
