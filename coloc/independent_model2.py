@@ -11,7 +11,7 @@ class IndependentFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, get_expected_weights, check_convergence
 
-    def __init__(self, X, Y, K, covariates=None, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
+    def __init__(self, X, Y, K, covariates=None, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
         """
         Y [T x M] expresion for tissue, individual
         X [N x M] genotype for snp, individual
@@ -42,7 +42,6 @@ class IndependentFactorSER:
         self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
 
         # initialize latent vars
-        self.active = np.ones((T, K))
         self.weight_means = np.zeros((T, K, N))
         self.weight_vars = np.ones((T, K, N))
         self.tissue_variance = np.ones(T)
@@ -96,34 +95,25 @@ class IndependentFactorSER:
     def _compute_first_moment_hash(self, component, hash):
         pi = self.pi[component]
         weight = self.weight_means[:, component]
-        active = self.active[:, component][:, None]
-        return (pi * weight * active) @ self.X
+        return (pi * weight) @ self.X
 
     def compute_first_moment(self, component):
         pi = self.pi[component]
         weight = self.weight_means[:, component]
-        active = self.active[:, component][:, None]
         h = (pi @ weight.T).tobytes()
         return self._compute_first_moment_hash(component, h)
-
-    @np_cache_class(maxsize=2**5)
-    def _compute_second_moment(self, pi, weight, var, active):
-        return (pi * (weight**2 + var) * active) @ self.X**2
 
     @lru_cache(maxsize=2**5)
     def _compute_second_moment_hash(self, component, hash):
         pi = self.pi[component]
         weight = self.weight_means[:, component]
         var = self.weight_vars[:, component]
-        active = self.active[:, component][:, None]
-        return (pi * (weight**2 + var) * active) @ self.X**2
+        return (pi * (weight**2 + var)) @ self.X**2
 
     def compute_second_moment(self, component):
         pi = self.pi[component]
         weight = self.weight_means[:, component]
         var = self.weight_vars[:, component]
-        active = self.active[:, component][:, None]
-
         h = (pi @ (weight + var**2).T).tobytes()
         return self._compute_second_moment_hash(component, h)
 
@@ -332,7 +322,7 @@ class IndependentFactorSER:
         KL += Elna.sum()
 
         # Kl alpha
-        KL += gamma_kl(self.ard_precision_a, self.ard_precision_b, 1e-6, 1e-6)
+        KL += gamma_kl(self.ard_precision_a, self.ard_precision_b, 1e-6, 1e-6).sum()
 
         # KL z
         KL += np.sum(
