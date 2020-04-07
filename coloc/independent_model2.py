@@ -319,6 +319,7 @@ class IndependentFactorSER:
             for l in components:
                 residual = residual + self.compute_first_moment(l)
 
+
                 if ARD_weights:
                     self.update_ARD_weights(l)
                 if update_weights: self._update_weight_component(
