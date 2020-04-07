@@ -318,13 +318,16 @@ class IndependentFactorSER:
             # update component parameters
             for l in components:
                 residual = residual + self.compute_first_moment(l)
+
+                if ARD_weights:
+                    self.update_ARD_weights(l)
                 if update_weights: self._update_weight_component(
-                    l, ARD=ARD_weights, residual=residual)
+                    l, residual=residual)
                 if update_pi: self._update_pi_component(l, residual=residual)
                 residual = residual - self.compute_first_moment(l)
 
             # update variance parameters
-            if update_variance: self._update_tissue_variance(residual=residual)
+            if update_variance: self.update_tissue_variance(residual=residual)
 
             # monitor convergence with ELBO
             self.elbos.append(self.compute_elbo(residual=residual))
