@@ -349,7 +349,6 @@ class IndependentFactorSER:
         """
         copute evidence lower bound
         """
-
         expected_conditional = 0
         KL = 0
 
