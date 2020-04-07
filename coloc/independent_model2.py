@@ -222,7 +222,7 @@ class IndependentFactorSER:
         tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
 
         # E[ln p(w | alpha)]
-        tmp2 = -0.5 * self.expected_weight_precision[:, k] * (
+        tmp2 = -0.5 * self.expected_weight_precision[:, k][:, None] * (
             self.weight_means[:, k]**2 + self.weight_vars[:, k]
         )
 
