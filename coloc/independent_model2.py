@@ -187,13 +187,31 @@ class IndependentFactorSER:
     def _compute_ERSS(self, residual=None):
         if residual is None:
             residual = self.compute_residual()
-        ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2) for tissue in range(self.dims['T'])])
+        ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
+            for tissue in range(self.dims['T'])])
+
+        for k in range(self.dims['K']):
+            #mu = self.compute_first_moment(k)
+            #mu2 = self.compute_second_moment(k)
+            pi = self.pi[k]
+            for t in range(self.dims['T']):
+                mu = self.weight_means[t, k]
+                var = self.weight_vars[t, k]
+                mask = self._get_mask(t)
+                diag = self._get_diag(t)
+                ERSS[t] += np.inner(diag, (mu**2 + var + mu) * pi)
+
+                tmp = (mu * pi) @ self.X[:, mask]
+                ERSS[t] -= np.inner(tmp, tmp)
+        """        
         for k in range(self.dims['K']):
             mu = self.compute_first_moment(k)
             mu2 = self.compute_second_moment(k)
             for t in range(self.dims['T']):
+                mu
                 mask = self._get_mask(t)
                 ERSS[t] += mu2[t, mask].sum() - (mu[t, mask]**2).sum()
+        """
         return ERSS
 
     def _update_covariate_weights_tissue(self, residual, tissue):
@@ -321,8 +339,6 @@ class IndependentFactorSER:
             # update component parameters
             for l in components:
                 residual = residual + self.compute_first_moment(l)
-
-
                 if ARD_weights:
                     self.update_ARD_weights(l)
                 if update_weights: self._update_weight_component(
@@ -331,7 +347,8 @@ class IndependentFactorSER:
                 residual = residual - self.compute_first_moment(l)
 
             # update variance parameters
-            if update_variance: self.update_tissue_variance(residual=residual)
+            if update_variance: 
+                self.update_tissue_variance(residual=residual)
 
             # monitor convergence with ELBO
             self.elbos.append(self.compute_elbo(residual=residual))
