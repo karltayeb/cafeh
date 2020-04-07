@@ -317,7 +317,7 @@ class IndependentFactorSER:
         w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
         entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
         KL += np.sum(
-            (precision / 2) * w2 - entropy
+            -0.5 * Elna  - 0.5 * precision * w2 - entropy
         )
         KL += Elna.sum()
 
