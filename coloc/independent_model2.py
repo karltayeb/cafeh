@@ -264,7 +264,7 @@ class IndependentFactorSER:
         E_alpha = self.expected_weight_precision[:, k]
         E_w2 = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) 
         lik = (0.5 * E_ln_alpha[:, None] - 0.5 * E_alpha[:, None] * E_w2)
-        entropy = (normal_entropy(model2.weight_vars[:, k]))
+        entropy = (normal_entropy(self.weight_vars[:, k]))
 
         pi_k = (tmp1 + lik + entropy)
 
