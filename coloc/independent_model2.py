@@ -205,12 +205,12 @@ class IndependentFactorSER:
             ERSS[t] -= np.inner(prediction[t, mask], prediction[t, mask])
         return ERSS
 
-    def _compute_ERSS3(self, residual=None):
+    def _compute_ERSS(self, residual=None):
         if residual is None:
             residual = self.compute_residual()
         ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
                          for tissue in range(self.dims['T'])])
-        mu = np.sum([self.compute_first_moment(k)
+        mu = np.sum([self.compute_first_moment(k)**2
                      for k in range(self.dims['K'])], axis=0)
         mu2 = np.sum([self.compute_second_moment(k)
                       for k in range(self.dims['K'])], axis=0)
@@ -218,11 +218,12 @@ class IndependentFactorSER:
         ERSS += ((mu2 - mu**2) * mask).sum(1)
         return ERSS
 
-    def _compute_ERSS(self, residual=None):
+    def _compute_ERSS3(self, residual=None):
         if residual is None:
             residual = self.compute_residual()
         ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
             for tissue in range(self.dims['T'])])
+
         for k in range(self.dims['K']):
             mu = self.compute_first_moment(k)
             mu2 = self.compute_second_moment(k)
