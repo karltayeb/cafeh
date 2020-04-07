@@ -365,7 +365,6 @@ class IndependentFactorSER:
         for tissue in range(self.dims['T']):
             mask = self._get_mask(tissue)
             expected_conditional += \
-                - 0.5 * mask.sum() * np.log(2 * np.pi) \
                 + 0.5 * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
