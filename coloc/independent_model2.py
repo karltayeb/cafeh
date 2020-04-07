@@ -58,46 +58,76 @@ class IndependentFactorSER:
         self.a = 1e-6
         self.b = 1e-6
 
-        self.ard_precision_a = np.ones((T, K))
-        self.ard_precision_b = np.ones((T, K))
+        self.weight_precision_a = np.ones((T, K))
+        self.weight_precision_b = np.ones((T, K))
 
         self.c = 1e-6
         self.d=1e-6
+
+        self.tissue_precision_a = np.ones(T)
+        self.tissue_precision_b = np.ones(T)
 
         self.elbos = []
         self.tolerance = tolerance
         self.run_time = 0
 
     @property
+    def expected_tissue_precision(self):
+        """
+        expected precision for tissue under variational approximation
+        """
+        return self.tissue_precision_a / self.tissue_precision_b
+
+    @property
+    def expected_weight_precision(self):
+        """
+        expected precision for weights under variational approximation
+        """
+        return self.weight_precision_a / self.weight_precision_b
+
+    @property
     def credible_sets(self):
+        """
+        return credible sets
+        """
         return self.get_credible_sets()[0]
 
     @property
     def purity(self):
+        """
+        return minimum absolute correlation of snps in each credible set
+        """
         return self.get_credible_sets()[1]
-
-    def expected_weight_precision(self):
-        return self.ard_precision_a / self.ard_precision_b
-
-    def expected_weight_variance(self):
-        return self.ard_precision_b / self.ard_precision_a
 
     @lru_cache()
     def _get_mask(self, tissue):
+        """
+        nan mask to deal with missing values
+        """
         return ~np.isnan(self.Y[tissue])
 
     @lru_cache()
     def _get_diag(self, tissue):
+        """
+        get diag(X^T X) for a given tissue
+        differs for tissues because of missingness in Y
+        """
         mask = self._get_mask(tissue)
         return np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
 
     @lru_cache()
     def _compute_first_moment_hash(self, component, hash):
+        """
+        compute E[Xzw] for a component
+        """
         pi = self.pi[component]
         weight = self.weight_means[:, component]
         return (pi * weight) @ self.X
 
     def compute_first_moment(self, component):
+        """
+        compute E[Xzw] for a component
+        """
         pi = self.pi[component]
         weight = self.weight_means[:, component]
         h = (pi @ weight.T).tobytes()
@@ -105,12 +135,18 @@ class IndependentFactorSER:
 
     @lru_cache(maxsize=2**5)
     def _compute_second_moment_hash(self, component, hash):
+        """
+        compute E[(Xzw)^2] for a component
+        """
         pi = self.pi[component]
         weight = self.weight_means[:, component]
         var = self.weight_vars[:, component]
         return (pi * (weight**2 + var)) @ self.X**2
 
     def compute_second_moment(self, component):
+        """
+        compute E[(Xzw)^2] for a component
+        """
         pi = self.pi[component]
         weight = self.weight_means[:, component]
         var = self.weight_vars[:, component]
@@ -170,25 +206,33 @@ class IndependentFactorSER:
 
     def _update_pi_component(self, k, residual=None):
         """
-        update pi for a single component
+        update pi for a component
         """
+        mask = np.isnan(self.Y)
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
+        
         if residual is None:
             r_k = self.compute_residual(k)
         else:
             r_k = residual
+        r_k[mask] = 0
 
-        # 0 out nans
-        r_k[np.isnan(self.Y)] = 0
 
-        tmp1 = (-0.5 / self.tissue_variance[:, None]) * (
-            - 2 * r_k @ (self.X.T) * self.weight_means[:, k]
-            + (self.weight_means[:, k] ** 2 + self.weight_vars[:, k]) * diag
+        # E[ln p(y | w, z, alpha , tau)]
+        tmp1 = -2 * r_k @ self.X.T * weight_means[:, k] \
+            + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
+        tmp1 = -0.5 * self.expected_tissue_precision[:, [k]] * tmp1
+
+        # E[ln p(w | alpha)]
+        tmp2 = -0.5 * self.expected_weight_precision[:, k] * (
+            self.weight_means[:, k]**2 + self.weight_vars[:, k]
         )
-        tmp2 = -1 * normal_kl(
-            self.weight_means[:, k], self.weight_vars[:, k],
-            0.0, (self.ard_precision_b[:, k] / self.ard_precision_a[:, k])[:, None])
-        pi_k = (tmp1 + tmp2)
+
+        # H(q(w))
+        tmp3 = normal_entropy(self.weight_vars[:, k])
+
+        import pdb; pdb.set_trace()
+        pi_k = (tmp1 + tmp2 + tmp3)
 
         pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
@@ -197,33 +241,56 @@ class IndependentFactorSER:
 
         self.pi[k] = pi_k
 
+    def update_pi(self, components=None):
+        """
+        update pi
+        """
+        if components is None:
+            components = np.arange(self.dims['K'])
+
+        for k in components:
+            self._update_pi_component(k)
+
+
+    def update_ARD_weights(self, k):
+        """
+        ARD update for weights
+        """
+        second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k]
+        alpha = self.a + 0.5
+        beta = self.b + second_moment / 2
+        self.weight_precision_a[:, k] = alpha
+        self.weight_precision_b[:, k] = beta
+
     def _update_weight_component(self, k, ARD=True, residual=None):
         """
         update weights for a component
         """
-        if ARD:
-            second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k]
-            alpha = self.a + 0.5
-            beta = self.b + second_moment / 2
-            self.ard_precision_a[:, k] = alpha
-            self.ard_precision_b[:, k] = beta
-
         mask = np.isnan(self.Y)
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
+        
         if residual is None:
             r_k = self.compute_residual(k)
         else:
             r_k = residual
         r_k[mask] = 0
 
-        precision = (diag / self.tissue_variance[:, None]) \
-            + (self.ard_precision_a[:, k] / self.ard_precision_b[:, k])[:, None]
-        variance = 1 / precision
-        mean = (variance / self.tissue_variance[:, None]) * (r_k @ self.X.T)
+        precision = diag * self.expected_tissue_precision[:, None] \
+            + self.expected_weight_precision[:, [k]]
+        variance = 1 / precision  # [T, N]
+
+        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
         self.weight_vars[:, k] = variance
         self.weight_means[:, k] = mean
 
-    def _update_tissue_variance(self, residual=None):
+    def update_weights(self, components=None, ARD=True):
+        if components is None:
+            components = np.arange(self.dims['K'])
+
+        for k in components:
+            self._update_weight_component(k, ARD)
+
+    def update_tissue_variance(self, residual=None):
         if residual is None:
             residual = self.compute_residual()
         ERSS = self._compute_ERSS(residual=residual)
@@ -235,23 +302,6 @@ class IndependentFactorSER:
             residual = self.compute_residual(use_covariates=False)
             for tissue in self.tissue_ids:
                 self._update_covariate_weights_tissue(residual, tissue)
-
-    def update_weights(self, components=None, ARD=True):
-        if components is None:
-            components = np.arange(self.dims['K'])
-
-        for k in components:
-            self._update_weight_component(k, ARD)
-
-    def update_pi(self, components=None):
-        """
-        update pi
-        """
-        if components is None:
-            components = np.arange(self.dims['K'])
-
-        for k in components:
-            self._update_pi_component(k)
 
     def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_pi=True, update_variance=True, ARD_weights=False, update_covariate_weights=True):
         """
@@ -312,7 +362,7 @@ class IndependentFactorSER:
                 -0.5 / self.tissue_variance[tissue] * ERSS[tissue]
         
         # <ln p (w | alpha) > - <ln q(w)> - <ln q(w)>
-        Elna = digamma(self.ard_precision_a) - np.log(self.ard_precision_b)  # [T, K]
+        Elna = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)  # [T, K]
         precision = self.expected_weight_precision()  # [T, K]
         w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
         entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
@@ -322,7 +372,7 @@ class IndependentFactorSER:
         KL += Elna.sum()
 
         # Kl alpha
-        # KL += gamma_kl(self.ard_precision_a, self.ard_precision_b, 1e-6, 1e-6).sum()
+        # KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, 1e-6, 1e-6).sum()
 
         # KL z
         KL += np.sum(
