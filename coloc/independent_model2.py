@@ -199,7 +199,7 @@ class IndependentFactorSER:
             var_pi = (self.weight_vars[t] * self.pi).sum(0)
 
             ERSS[t] += np.inner(diag, mu2_pi + var_pi + mu_pi)
-            ERSS[t] -= np.inner(prediction[t], prediction[t])
+            ERSS[t] -= np.inner(prediction[t, mask], prediction[t, mask])
 
         """        
         for k in range(self.dims['K']):
