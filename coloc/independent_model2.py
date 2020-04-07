@@ -214,7 +214,7 @@ class IndependentFactorSER:
                      for k in range(self.dims['K'])], axis=0)
         mu2 = np.sum([self.compute_second_moment(k)
                       for k in range(self.dims['K'])], axis=0)
-        mask = np.array([model2._get_mask(t) for t in range(self.dims['T'])])
+        mask = np.array([self._get_mask(t) for t in range(self.dims['T'])])
         ERSS += ((mu2 - mu**2) * mask).sum(1)
         return ERSS
 
