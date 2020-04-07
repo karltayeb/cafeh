@@ -189,8 +189,6 @@ class IndependentFactorSER:
             residual = self.compute_residual()
         ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2) for tissue in range(self.dims['T'])])
         for k in range(self.dims['K']):
-            #mu = np.array([self._compute_first_moment(t, k) for t in range(self.dims['T'])])
-            #mu2 = np.array([self._compute_second_moment(t, k) for t in range(self.dims['T'])])
             mu = self.compute_first_moment(k)
             mu2 = self.compute_second_moment(k)
             for t in range(self.dims['T']):
@@ -350,31 +348,32 @@ class IndependentFactorSER:
         copute evidence lower bound
         """
 
-        expected_conditional = 0
+        expected_joint = 0
         KL = 0
 
-        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
-        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
+        E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
+
+        E_tau = self.expected_tissue_precision
+        E_alpha = self.expected_weight_precision
+
         ERSS = self._compute_ERSS(residual=residual)
         for tissue in range(self.dims['T']):
             mask = self._get_mask(tissue)
-            expected_conditional += -0.5 * mask.sum() * np.log(2 * np.pi * self.tissue_variance[tissue]) \
-                -0.5 / self.tissue_variance[tissue] * ERSS[tissue]
-        
-        # <ln p (w | alpha) > - <ln q(w)> - <ln q(w)>
-        Elna = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)  # [T, K]
-        precision = self.expected_weight_precision()  # [T, K]
-        w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
-        entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
-        KL += np.sum(
-            -0.5 * Elna  - 0.5 * precision * w2 - entropy
+            expected_conditional += 0.5 * mask.sum() * np.log(2 * np.pi) \
+                + 0.5 * E_ln_tau[tissue] \
+                - 0.5 * E_tau[tissue] * ERSS[tissue]
+
+
+        # compute E[KL q(w | z) || p(w | alpha)]
+        E_w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
+        lik = np.sum(
+            0.5 * np.log(2 * np.pi) + 0.5 * E_ln_alpha - 0.5 * E_alpha * E_w2
         )
-        KL += Elna.sum()
-
-        # Kl alpha
-        # KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, 1e-6, 1e-6).sum()
-
-        # KL z
+        entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
+        KL += lik + entropy
+        KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
+        KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
