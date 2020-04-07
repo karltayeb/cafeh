@@ -322,7 +322,7 @@ class IndependentFactorSER:
         KL += Elna.sum()
 
         # Kl alpha
-        KL += gamma_kl(self.ard_precision_a, self.ard_precision_b, 1e-6, 1e-6).sum()
+        # KL += gamma_kl(self.ard_precision_a, self.ard_precision_b, 1e-6, 1e-6).sum()
 
         # KL z
         KL += np.sum(
