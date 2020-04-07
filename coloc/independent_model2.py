@@ -311,8 +311,9 @@ class IndependentFactorSER:
 
         precision = diag * self.expected_tissue_precision[:, None] \
             + self.expected_weight_precision[:, k][:, None]
-        mean = (self.expected_tissue_precision[:, None] / precision) * (r_k @ self.X.T)
-        self.weight_vars[:, k] = 1 / precision
+        variance = 1 / precision  # [T, N]
+        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
+        self.weight_vars[:, k] = variance
         self.weight_means[:, k] = mean
 
     def update_weights(self, components=None, ARD=True):
