@@ -192,7 +192,7 @@ class IndependentFactorSER:
 
         prediction = np.sum([
             self.compute_first_moment(k) for k in range(self.dims['K'])
-        ])
+        ], axis=0)
         for t in range(self.dims['T']):
             mask = self._get_mask(t)
             diag = self._get_diag(t)
@@ -214,9 +214,8 @@ class IndependentFactorSER:
                      for k in range(self.dims['K'])], axis=0)
         mu2 = np.sum([self.compute_second_moment(k)
                       for k in range(self.dims['K'])], axis=0)
-        for t in range(self.dims['T']):
-            mask = self._get_mask(t)
-            ERSS[t] += mu2[t, mask].sum() - (mu[t, mask]**2).sum()
+        mask = np.array([model2._get_mask(t) for t in range(self.dims['T'])])
+        ERSS += ((mu2 - mu**2) * mask).sum(1)
         return ERSS
 
     def _compute_ERSS(self, residual=None):
