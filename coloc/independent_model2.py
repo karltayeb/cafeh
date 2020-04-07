@@ -316,7 +316,6 @@ class IndependentFactorSER:
         precision = self.expected_weight_precision()  # [T, K]
         w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
         entropy = (normal_entropy(self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
-        import pdb; pdb.set_trace()
         KL += np.sum(
             (precision / 2) * w2 - entropy
         )
