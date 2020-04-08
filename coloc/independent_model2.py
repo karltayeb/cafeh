@@ -338,7 +338,7 @@ class IndependentFactorSER:
         self.weight_precision_a[:, k] = alpha
         self.weight_precision_b[:, k] = beta
 
-    def _update_weight_component_new(self, k, ARD=True, residual=None):
+    def _update_weight_component(self, k, ARD=True, residual=None):
         """
         update weights for a component
         """
@@ -357,7 +357,7 @@ class IndependentFactorSER:
         self.weight_vars[:, k] = variance
         self.weight_means[:, k] = mean
 
-    def _update_weight_component(self, k, residual=None):
+    def _update_weight_component_old(self, k, residual=None):
         """
         update weights for a component
         """
