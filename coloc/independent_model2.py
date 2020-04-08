@@ -421,7 +421,7 @@ class IndependentFactorSER:
                     + 0.5 * E_ln_alpha[t, k]
                     - 0.5 * E_ln_alpha[t, k] * E_w2[t, k]
                 )
-                KL += lik[t, k] + entropy[t, k]
+                KL += lik+ entropy[t, k]
 
         # compute E[KL q(w | z) || p(w | alpha)]
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
