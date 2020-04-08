@@ -273,7 +273,6 @@ class IndependentFactorSER:
 
         # E[ln p(y | w, z, alpha , tau)]
         py = (
-            0.5 * (mask.sum(1) * E_ln_tau)[:, None]
             -0.5 * E_tau[:, None] * (
                 -2 * r_k @ self.X.T * self.weight_means[:, k] \
                 + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
@@ -292,6 +291,7 @@ class IndependentFactorSER:
             + 0.5 * E_ln_alpha[:, None]
             - 0.5 * E_alpha[:, None] * E_w2
         ).sum(0)
+
         Hw = normal_entropy(self.weight_vars[:, k]).sum(0)  # [T, N]
 
         pi_k = (py + pw + Hw)
