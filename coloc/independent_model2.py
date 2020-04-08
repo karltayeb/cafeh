@@ -488,18 +488,23 @@ class IndependentFactorSER:
         """
         copute evidence lower bound
         """
-
         expected_conditional = 0
         KL = 0
 
-        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
-        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
+        E_alpha = self.expected_weight_precision
+
+        E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
+        E_tau = self.expected_tissue_precision
+
         ERSS = self._compute_ERSS(residual=residual)
         for tissue in range(self.dims['T']):
             mask = self._get_mask(tissue)
             expected_conditional += \
-                -0.5 * mask.sum() * np.log(2 * np.pi / self.expected_tissue_precision[tissue]) \
-                -0.5 * self.expected_tissue_precision[tissue] * ERSS[tissue]
+                - 0.5 * mask.sum() * np.log(2 * np.pi) \
+                + 0.5 * mask.sum() * E_ln_tau[tissue] \
+                - 0.5 * E_tau[tissue] * ERSS[tissue]
+
         # KL(q(W | S) || p(W)) = KL(q(W | S = 1) || p(W)) q(S = 1) + KL(p(W) || p(W)) (1 - q(S = 1))
         KL += np.sum(
             normal_kl(
