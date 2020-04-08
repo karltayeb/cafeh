@@ -413,11 +413,10 @@ class IndependentFactorSER:
 
         E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
         entropy = np.einsum('ijk,jk->ij', normal_entropy(self.weight_vars), self.pi)
-        
         lik = (
             - 0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha
-            - 0.5 * E_ln_alpha[t, k] * E_w2
+            - 0.5 * E_ln_alpha * E_w2
         )
         KL += lik.sum() + entropy.sum()
 
