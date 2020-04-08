@@ -55,14 +55,14 @@ class IndependentFactorSER:
             self.cov_weights = None
 
         # hyper-parameters
-        self.a = 1e-6
-        self.b = 1e-6
+        self.a = 1e-10
+        self.b = 1e-10
 
         self.weight_precision_a = np.ones((T, K))
         self.weight_precision_b = np.ones((T, K))
 
-        self.c = 1e-6
-        self.d=1e-6
+        self.c = 1e-10
+        self.d=1e-10
 
         self.tissue_precision_a = np.ones(T)
         self.tissue_precision_b = np.ones(T)
@@ -252,18 +252,15 @@ class IndependentFactorSER:
         r_k[mask] = 0
 
 
-        # E[ln p(y | w, z, alpha , tau)]
-        tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
-            + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
-        tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
-
-
-        # E[ln p(w | alpha)] + H(q(w))
-        E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
-            - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision[:, k]
         E_w2 = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) 
-        lik = (0.5 * E_ln_alpha[:, None] - 0.5 * E_alpha[:, None] * E_w2)
+
+        # E[ln p(y | w, z, alpha , tau)]
+        tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] + diag * E_w2
+        tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
+
+        # E[ln p(w | alpha)] + H(q(w))
+        lik = - 0.5 * E_alpha[:, None] * E_w2
         entropy = (normal_entropy(self.weight_vars[:, k]))
 
         pi_k = (tmp1 + lik + entropy)
