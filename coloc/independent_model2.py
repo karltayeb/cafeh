@@ -44,7 +44,6 @@ class IndependentFactorSER:
         # initialize latent vars
         self.weight_means = np.zeros((T, K, N))
         self.weight_vars = np.ones((T, K, N))
-        self.tissue_variance = np.ones(T)
         self.pi = np.ones((K, N)) / N
 
         if self.covariates is not None:
@@ -430,8 +429,10 @@ class IndependentFactorSER:
         KL += lik.sum() + entropy.sum()
 
         # compute E[KL q(w | z) || p(w | alpha)]
+        """
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
         KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
+        """
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
