@@ -288,35 +288,6 @@ class IndependentFactorSER:
 
         self.pi[k] = pi_k
 
-    def _update_pi_component_old(self, k, residual=None):
-        """
-        update pi for a single component
-        """
-        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
-        if residual is None:
-            r_k = self.compute_residual(k)
-        else:
-            r_k = residual
-
-        # 0 out nans
-        r_k[np.isnan(self.Y)] = 0
-
-        tmp1 = (-0.5 * self.expected_tissue_precision[:, None]) * (
-            - 2 * r_k @ (self.X.T) * self.weight_means[:, k]
-            + self.weight_means[:, k] ** 2 * diag
-        )
-        tmp2 = -0.5 * self.expected_tissue_precision[:, None] * (self.weight_vars[:, k]) * diag
-        tmp3 = -1 * normal_kl(
-            self.weight_means[:, k], self.weight_vars[:, k],
-            0.0, 1 / self.expected_weight_precision[:, k][:, None]
-        )
-        pi_k = (tmp1 + tmp2 + tmp3)
-        pi_k = pi_k.sum(0)
-        pi_k += np.log(self.prior_pi)
-        pi_k = np.exp(pi_k - pi_k.max())
-        pi_k = pi_k / pi_k.sum()
-
-        self.pi[k] = pi_k
     def update_pi(self, components=None):
         """
         update pi
@@ -353,24 +324,6 @@ class IndependentFactorSER:
         precision = diag * self.expected_tissue_precision[:, None] \
             + self.expected_weight_precision[:, k][:, None]
         variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
-        self.weight_vars[:, k] = variance
-        self.weight_means[:, k] = mean
-
-    def _update_weight_component_old(self, k, residual=None):
-        """
-        update weights for a component
-        """
-        mask = np.isnan(self.Y)
-        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
-        if residual is None:
-            r_k = self.compute_residual(k)
-        else:
-            r_k = residual
-        r_k[mask] = 0
-
-        precision = (diag * self.expected_tissue_precision[:, None]) + self.expected_weight_precision[:, k][:, None]
-        variance = 1 / precision
         mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
         self.weight_vars[:, k] = variance
         self.weight_means[:, k] = mean
