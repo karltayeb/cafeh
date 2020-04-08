@@ -265,18 +265,21 @@ class IndependentFactorSER:
 
 
         # E[ln p(y | w, z, alpha , tau)]
-        tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
+        tmp1 = -2 * r_k @ self.X.T[mask] * self.weight_means[:, k] \
             + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
-        tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
-
+        tmp1 = (-0.5 * self.expected_tissue_precision[:, None] * tmp1).sum(0)
 
         # E[ln p(w | alpha)] + H(q(w))
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision[:, k]
         E_w2 = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) 
-        lik = (0.5 * E_ln_alpha[:, None] - 0.5 * E_alpha[:, None] * E_w2)
-        entropy = (normal_entropy(self.weight_vars[:, k]))
+        lik = (
+            -0.5 * np.log(2 * np.pi)
+            + 0.5 * E_ln_alpha[:, None]
+            - 0.5 * E_alpha[:, None] * E_w2
+        ).sum(0)
+        entropy = normal_entropy(self.weight_vars[:, k]).sum(0)  # [T, N]
 
         pi_k = (tmp1 + lik + entropy)
 
@@ -419,15 +422,12 @@ class IndependentFactorSER:
 
         E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
         entropy = np.einsum('ijk,jk->ij', normal_entropy(self.weight_vars), self.pi)
-
-        for t in range(self.dims['T']):
-            for k in range(self.dims['K']):
-                lik = (
-                    - 0.5 * np.log(2 * np.pi)
-                    + 0.5 * E_ln_alpha[t, k]
-                    - 0.5 * E_ln_alpha[t, k] * E_w2[t, k]
-                )
-                KL += lik+ entropy[t, k]
+        lik = (
+            - 0.5 * np.log(2 * np.pi)
+            + 0.5 * E_ln_alpha
+            - 0.5 * E_ln_alpha * E_w2
+        )
+        KL += lik.sum() + entropy.sum()
 
         # compute E[KL q(w | z) || p(w | alpha)]
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
