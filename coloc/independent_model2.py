@@ -330,7 +330,7 @@ class IndependentFactorSER:
 
         n_samples = np.array([self._get_mask(t).sum()
             for t in range(self.dims['T'])])
-        self.tissue_precision_a = self.c + (n_samples + 1) / 2
+        self.tissue_precision_a = self.c + n_samples / 2
         self.tissue_precision_b = self.d + ERSS / 2
 
     def update_covariate_weights(self):
