@@ -261,11 +261,13 @@ class IndependentFactorSER:
         ERSS += ((mu2 - mu) * mask).sum(1)
         return ERSS
 
-    def _compute_ERSS(self):
+    def _compute_ERSS(self, residual=None):
         """
         compute ERSS using XY and XX
         """
-        residual = self.compute_residual()
+        if residual is None:
+            residual = self.compute_residual()
+
         ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
             for tissue in range(self.dims['T'])])
 
