@@ -295,8 +295,6 @@ class IndependentFactorSER:
         Hw = normal_entropy(self.weight_vars[:, k]).sum(0)  # [T, N]
 
         pi_k = (py + pw + Hw)
-
-        pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
         pi_k = np.exp(pi_k - pi_k.max())
         pi_k = pi_k / pi_k.sum()
