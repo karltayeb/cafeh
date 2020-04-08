@@ -249,7 +249,7 @@ class IndependentFactorSER:
         X = self.covariates[tissue].values
         self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
 
-    def _update_pi_component_new(self, k, residual=None):
+    def _update_pi_component(self, k, residual=None):
         """
         update pi for a component
         """
@@ -288,7 +288,7 @@ class IndependentFactorSER:
 
         self.pi[k] = pi_k
 
-    def _update_pi_component(self, k, residual=None):
+    def _update_pi_component_old(self, k, residual=None):
         """
         update pi for a single component
         """
