@@ -272,18 +272,19 @@ class IndependentFactorSER:
         r_k[mask] = 0
 
         # E[ln p(y | w, z, alpha , tau)]
+        """
         py = (
             -0.5 * E_tau[:, None] * (
                 -2 * r_k @ self.X.T * self.weight_means[:, k] \
                 + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
             )
         ).sum(0)
+        """
 
-        """
-        tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
+        py = -2 * r_k @ self.X.T * self.weight_means[:, k] \
             + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
-        tmp1 = (-0.5 * self.expected_tissue_precision[:, None] * tmp1).sum(0)
-        """
+        py = (-0.5 * E_tau[:, None] * py).sum(0)
+
         # E[ln p(w | alpha)] + H(q(w))
 
         pw = (
