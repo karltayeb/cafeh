@@ -254,34 +254,47 @@ class IndependentFactorSER:
         """
         update pi for a component
         """
+        E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
+        E_tau = self.expected_tissue_precision
+
+        E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
+            - np.log(self.weight_precision_b[:, k])
+        E_alpha = self.expected_weight_precision[:, k]
+        E_w2 = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) 
+
         mask = np.isnan(self.Y)
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
-        
+
         if residual is None:
             r_k = self.compute_residual(k)
         else:
             r_k = residual
         r_k[mask] = 0
 
-
         # E[ln p(y | w, z, alpha , tau)]
-        tmp1 = -2 * r_k @ self.X.T[mask] * self.weight_means[:, k] \
+        py = (
+            0.5 * (mask.sum(1) * E_ln_tau)[:, None]
+            -0.5 * E_tau[:, None] * (
+                -2 * r_k @ self.X.T * self.weight_means[:, k] \
+                + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
+            )
+        ).sum(0)
+
+        """
+        tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
             + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
         tmp1 = (-0.5 * self.expected_tissue_precision[:, None] * tmp1).sum(0)
-
+        """
         # E[ln p(w | alpha)] + H(q(w))
-        E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
-            - np.log(self.weight_precision_b[:, k])
-        E_alpha = self.expected_weight_precision[:, k]
-        E_w2 = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) 
-        lik = (
+
+        pw = (
             -0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha[:, None]
             - 0.5 * E_alpha[:, None] * E_w2
         ).sum(0)
-        entropy = normal_entropy(self.weight_vars[:, k]).sum(0)  # [T, N]
+        Hw = normal_entropy(self.weight_vars[:, k]).sum(0)  # [T, N]
 
-        pi_k = (tmp1 + lik + entropy)
+        pi_k = (py + pw + Hw)
 
         pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
