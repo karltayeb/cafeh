@@ -249,13 +249,12 @@ class IndependentFactorSER:
         X = self.covariates[tissue].values
         self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
 
-    def _update_pi_component_O(self, k, residual=None):
+    def _update_pi_component(self, k, residual=None):
         """
         update pi for a component
         """
         mask = np.isnan(self.Y)
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
-        
         if residual is None:
             r_k = self.compute_residual(k)
         else:
@@ -289,49 +288,7 @@ class IndependentFactorSER:
 
         self.pi[k] = pi_k
 
-    def update_pi(self, components=None):
-        """
-        update pi
-        """
-        if components is None:
-            components = np.arange(self.dims['K'])
-
-        for k in components:
-            self._update_pi_component(k)
-
-
-    def update_ARD_weights(self, k):
-        """
-        ARD update for weights
-        """
-        second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k]
-        alpha = self.a + 0.5
-        beta = self.b + second_moment / 2
-        self.weight_precision_a[:, k] = alpha
-        self.weight_precision_b[:, k] = beta
-
-    def _update_weight_component_0(self, k, ARD=True, residual=None):
-        """
-        update weights for a component
-        """
-        mask = np.isnan(self.Y)
-        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
-        
-        if residual is None:
-            r_k = self.compute_residual(k)
-        else:
-            r_k = residual
-        r_k[mask] = 0
-
-        precision = diag * self.expected_tissue_precision[:, None] \
-            + self.expected_weight_precision[:, k][:, None]
-        variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
-        self.weight_vars[:, k] = variance
-        self.weight_means[:, k] = mean
-
-
-    def _update_pi_component(self, k, residual=None):
+    def _update_pi_component_old(self, k, residual=None):
         """
         update pi for a single component
         """
@@ -360,8 +317,47 @@ class IndependentFactorSER:
         pi_k = pi_k / pi_k.sum()
 
         self.pi[k] = pi_k
+    def update_pi(self, components=None):
+        """
+        update pi
+        """
+        if components is None:
+            components = np.arange(self.dims['K'])
 
-    def _update_weight_component(self, k, residual=None):
+        for k in components:
+            self._update_pi_component(k)
+
+
+    def update_ARD_weights(self, k):
+        """
+        ARD update for weights
+        """
+        second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k]
+        alpha = self.a + 0.5
+        beta = self.b + second_moment / 2
+        self.weight_precision_a[:, k] = alpha
+        self.weight_precision_b[:, k] = beta
+
+    def _update_weight_component(self, k, ARD=True, residual=None):
+        """
+        update weights for a component
+        """
+        mask = np.isnan(self.Y)
+        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
+        if residual is None:
+            r_k = self.compute_residual(k)
+        else:
+            r_k = residual
+        r_k[mask] = 0
+
+        precision = diag * self.expected_tissue_precision[:, None] \
+            + self.expected_weight_precision[:, k][:, None]
+        variance = 1 / precision  # [T, N]
+        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
+        self.weight_vars[:, k] = variance
+        self.weight_means[:, k] = mean
+
+    def _update_weight_component_old(self, k, residual=None):
         """
         update weights for a component
         """
@@ -447,7 +443,7 @@ class IndependentFactorSER:
         if verbose:
             print('cumulative run time: {}'.format(self.run_time))
 
-    def compute_elbo(self, residual=None):
+    def compute_elbo_new(self, residual=None):
         """
         copute evidence lower bound
         """
@@ -468,6 +464,7 @@ class IndependentFactorSER:
                 + 0.5 * mask.sum() * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
+        """
         E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
         entropy = np.einsum('ijk,jk->ij', normal_entropy(self.weight_vars), self.pi)
         lik = (
@@ -476,7 +473,7 @@ class IndependentFactorSER:
             - 0.5 * E_ln_alpha * E_w2
         )
         KL += lik.sum() + entropy.sum()
-
+        """
         # compute E[KL q(w | z) || p(w | alpha)]
         """
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
@@ -485,6 +482,36 @@ class IndependentFactorSER:
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
+        return expected_conditional - KL
+
+    def compute_elbo(self, residual=None):
+        """
+        copute evidence lower bound
+        """
+
+        expected_conditional = 0
+        KL = 0
+
+        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        # compute expected conditional log likelihood E[ln p(Y | X, Z)]
+        ERSS = self._compute_ERSS(residual=residual)
+        for tissue in range(self.dims['T']):
+            mask = self._get_mask(tissue)
+            expected_conditional += \
+                -0.5 * mask.sum() * np.log(2 * np.pi / self.expected_tissue_precision[tissue]) \
+                -0.5 * self.expected_tissue_precision[tissue] * ERSS[tissue]
+        # KL(q(W | S) || p(W)) = KL(q(W | S = 1) || p(W)) q(S = 1) + KL(p(W) || p(W)) (1 - q(S = 1))
+        KL += np.sum(
+            normal_kl(
+                self.weight_means, self.weight_vars,
+                0, 1 / self.expected_weight_precision[..., None]
+            ) * self.pi[None]
+        )
+
+        KL += np.sum(
+            [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
+        )
+        # KL += np.sum(gamma_logpdf(self.prior_precision, self.alpha0, self.beta0))
         return expected_conditional - KL
 
     def get_ld(self, snps):
