@@ -177,9 +177,11 @@ class IndependentFactorSER:
         compute expected prediction
         """
         prediction = self._compute_covariate_prediction(use_covariates)
-        prediction += self.expected_effects @ self.X
+
+        expected_effects = self.expected_effects
         if k is not None:
-            prediction -= self.compute_first_moment(k)
+            expected_effects -= self.weight_means[:, k] * self.pi[k][None]
+        prediction += self.expected_effects @ self.X
         return prediction
 
     def compute_residual(self, k=None, use_covariates=True):
