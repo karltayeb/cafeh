@@ -184,9 +184,11 @@ class IndependentFactorSER:
         prediction = self.compute_prediction(k, use_covariates)
         return self.Y - prediction
 
-    def _compute_ERSS2(self, residual=None):
-        if residual is None:
-            residual = self.compute_residual()
+    def _compute_ERSS_summary(self):
+        """
+        compute ERSS using XY and XX
+        """
+        residual = self.compute_residual()
         ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
             for tissue in range(self.dims['T'])])
 
@@ -197,12 +199,16 @@ class IndependentFactorSER:
             mask = self._get_mask(t)
             diag = self._get_diag(t)
 
-            mu_pi = (self.weight_means[t] * self.pi).sum(0)
-            mu2_pi = (self.weight_means[t]**2 * self.pi).sum(0)
-            var_pi = (self.weight_vars[t] * self.pi).sum(0)
+            YX = self.Y[t, mask] @ self.X.T[mask]
+            XX = self.X[:, mask] @ self.X[:, mask].T
 
-            ERSS[t] += np.inner(diag, mu2_pi + var_pi + mu_pi)
-            ERSS[t] -= np.inner(prediction[t, mask], prediction[t, mask])
+            pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
+            mu_pi = self.weight_means[t] * self.pi
+            pt2 = mu_pi @ XX @ mu_pi.T
+
+            ERSS[t] = np.inner(self.Y[t, mask], self.Y[t, mask])
+            ERSS[t] += -2 * np.inner(YX, mu_pi.sum(0))
+            ERSS[t] += pt1 + np.sum(pt2) - np.sum(np.diag(pt2))
         return ERSS
 
     def _compute_ERSS(self, residual=None):
@@ -405,13 +411,17 @@ class IndependentFactorSER:
                 + 0.5 * mask.sum() * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
-        # compute E[KL q(w | z) || p(w | alpha)]
-        E_w2 = ((self.weight_means**2 + self.weight_vars) * self.pi[None]).sum(-1)  # [T, K]
-        lik = np.sum(
-            -0.5 * np.log(2 * np.pi) + 0.5 * E_ln_alpha - 0.5 * E_alpha * E_w2
+        E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
+        entropy = np.einsum('ijk,jk->ij', normal_entropy(self.weight_vars), self.pi)
+        
+        lik = (
+            - 0.5 * np.log(2 * np.pi)
+            + 0.5 * E_ln_alpha
+            - 0.5 * E_ln_alpha[t, k] * E_w2
         )
-        entropy = np.sum(normal_entropy(self.weight_vars) * self.pi[None])
-        KL += lik + entropy
+        KL += lik.sum() + entropy.sum()
+
+        # compute E[KL q(w | z) || p(w | alpha)]
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
         KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
         KL += np.sum(
