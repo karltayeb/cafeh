@@ -477,8 +477,8 @@ class IndependentFactorSER:
             ) * self.pi[None]
         )
 
-        #KL += gamma_kl(self.a, self.b, self.weight_precision_a, self.weight_precision_b).sum()
-        #KL += gamma_kl(self.c, self.d, self.tissue_precision_a, self.tissue_precision_b).sum()
+        KL += gamma_kl(self.a, self.b, self.weight_precision_a, self.weight_precision_b).sum()
+        KL += gamma_kl(self.c, self.d, self.tissue_precision_a, self.tissue_precision_b).sum()
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
