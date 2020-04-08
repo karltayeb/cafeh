@@ -86,6 +86,13 @@ class IndependentFactorSER:
         return self.weight_precision_a / self.weight_precision_b
 
     @property
+    def expected_effects(self):
+        """
+        computed expected effect size E[zw] [T, N]
+        """
+        return np.einsum('ijk,jk->ik', self.weight_means, self.pi)
+
+    @property
     def credible_sets(self):
         """
         return credible sets
@@ -171,8 +178,7 @@ class IndependentFactorSER:
         compute expected prediction
         """
         prediction = self._compute_covariate_prediction(use_covariates)
-        for l in range(self.dims['K']):
-            prediction += self.compute_first_moment(l)
+        prediction += self.expected_effects @ self.X
         if k is not None:
             prediction -= self.compute_first_moment(k)
         return prediction
