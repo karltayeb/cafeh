@@ -458,7 +458,7 @@ class IndependentFactorSER:
                 + 0.5 * mask.sum() * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
-        """
+        
         E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
         entropy = np.einsum('ijk,jk->ij', normal_entropy(self.weight_vars), self.pi)
         lik = (
@@ -466,7 +466,7 @@ class IndependentFactorSER:
             + 0.5 * E_ln_alpha
             - 0.5 * E_ln_alpha * E_w2
         )
-        KL += lik.sum() + entropy.sum()
+        KL -= lik.sum() + entropy.sum()
 
         # KL(q(W | S) || p(W)) = KL(q(W | S = 1) || p(W)) q(S = 1) + KL(p(W) || p(W)) (1 - q(S = 1))
         """
@@ -476,7 +476,7 @@ class IndependentFactorSER:
                 0, 1 / self.expected_weight_precision[..., None]
             ) * self.pi[None]
         )
-
+        """
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
         KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
         KL += np.sum(
