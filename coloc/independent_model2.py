@@ -71,9 +71,16 @@ class IndependentFactorSER:
         self.run_time = 0
 
 
+        diags = {}
+        for tissue in range(T):
+            mask = self._get_mask(tissue)
+            diags[tissue] = np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
+
         self.precompute = {
             'Hw': normal_entropy(self.weight_vars),
-            'first_moments': {k: 0 for k in range(K)}
+            'first_moments': {},
+            'diags': diags,
+            'masks': {t: ~np.isnan(self.Y[t]) for t in range(T)}
         }
 
     @property
@@ -111,30 +118,18 @@ class IndependentFactorSER:
         """
         return self.get_credible_sets()[1]
 
-    @lru_cache()
     def _get_mask(self, tissue):
         """
         nan mask to deal with missing values
         """
-        return ~np.isnan(self.Y[tissue])
+        return self.precompute['masks'][tissue]
 
-    @lru_cache()
     def _get_diag(self, tissue):
         """
         get diag(X^T X) for a given tissue
         differs for tissues because of missingness in Y
         """
-        mask = self._get_mask(tissue)
-        return np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
-
-    @lru_cache()
-    def _compute_first_moment_hash(self, component, hash):
-        """
-        compute E[Xzw] for a component
-        """
-        pi = self.pi[component]
-        weight = self.weight_means[:, component]
-        return (pi * weight) @ self.X
+        return self.precompute['diags'][tissue]
 
     def compute_first_moment(self, component):
         """
@@ -206,12 +201,15 @@ class IndependentFactorSER:
         compute ERSS using XY and XX
         """
         residual = self.compute_residual()
-        ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
-            for tissue in range(self.dims['T'])])
+        ERSS = np.array([
+            np.sum(residual[tissue, self._get_mask(tissue)]**2)
+            for tissue in range(self.dims['T'])
+        ])
 
         prediction = np.sum([
             self.compute_first_moment(k) for k in range(self.dims['K'])
         ], axis=0)
+
         for t in range(self.dims['T']):
             mask = self._get_mask(t)
             diag = self._get_diag(t)
@@ -222,37 +220,6 @@ class IndependentFactorSER:
             pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
             mu_pi = self.weight_means[t] * self.pi
             pt2 = mu_pi @ XX @ mu_pi.T
-
-            ERSS[t] = np.inner(self.Y[t, mask], self.Y[t, mask])
-            ERSS[t] += -2 * np.inner(YX, mu_pi.sum(0))
-            ERSS[t] += pt1 + np.sum(pt2) - np.sum(np.diag(pt2))
-        return ERSS
-
-    def _compute_ERSS_summary(self):
-        """
-        compute ERSS using XY and XX
-        """
-        residual = self.compute_residual()
-        ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
-            for tissue in range(self.dims['T'])])
-
-        prediction = np.sum([
-            self.compute_first_moment(k) for k in range(self.dims['K'])
-        ], axis=0)
-
-        prediction = self.compute_prediction(use_covariates=False)
-        for t in range(self.dims['T']):
-            mask = self._get_mask(t)
-            diag = self._get_diag(t)
-
-            YX = self.Y[t, mask] @ self.X.T[mask]
-            XX = self.X[:, mask] @ self.X[:, mask].T
-
-            pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
-            mu_pi = self.weight_means[t] * self.pi
-            #pt2 = mu_pi @ XX @ mu_pi.T
-            p2 = prediction[t] @ self.X[:, mask]
-            p2 = np.inner(p2, p2)
 
             ERSS[t] = np.inner(self.Y[t, mask], self.Y[t, mask])
             ERSS[t] += -2 * np.inner(YX, mu_pi.sum(0))
@@ -279,12 +246,10 @@ class IndependentFactorSER:
         if residual is None:
             residual = self.compute_residual()
 
-        ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
-            for tissue in range(self.dims['T'])])
-
-        prediction = np.sum([
-            self.compute_first_moment(k) for k in range(self.dims['K'])
-        ], axis=0)
+        ERSS = np.array([
+            np.sum(residual[tissue, self._get_mask(tissue)]**2)
+            for tissue in range(self.dims['T'])
+        ])
 
         prediction = self.compute_prediction(use_covariates=False)
         first_moments = np.array([
