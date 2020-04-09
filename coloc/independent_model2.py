@@ -348,7 +348,7 @@ class IndependentFactorSER:
         self.pi[k] = pi_k
 
         # pop precomputes
-        self.precompute['first_moments'].pop(k)
+        self.precompute['first_moments'].pop(k, None)
 
     def update_pi(self, components=None):
         """
@@ -396,7 +396,7 @@ class IndependentFactorSER:
         self.precompute['Hw'][:, k] = normal_entropy(variance)
         
         # pop precomputes
-        self.precompute['first_moments'].pop(k)
+        self.precompute['first_moments'].pop(k, None)
 
     def update_weights(self, components=None, ARD=True):
         if components is None:
