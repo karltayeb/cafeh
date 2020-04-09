@@ -73,7 +73,7 @@ class IndependentFactorSER:
 
         self.precompute = {
             'Hw': normal_entropy(self.weight_vars),
-            'first_moments': {}
+            'first_moments': {k: 0 for k in range(K)}
         }
 
     @property
