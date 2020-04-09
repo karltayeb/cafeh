@@ -72,7 +72,8 @@ class IndependentFactorSER:
 
 
         self.precompute = {
-            'Hw': normal_entropy(self.weight_vars)
+            'Hw': normal_entropy(self.weight_vars),
+            'first_moments': {}
         }
 
     @property
@@ -139,10 +140,15 @@ class IndependentFactorSER:
         """
         compute E[Xzw] for a component
         """
-        pi = self.pi[component]
-        weight = self.weight_means[:, component]
-        h = (pi @ weight.T).tobytes()
-        return self._compute_first_moment_hash(component, h)
+
+        # if its not computed, compute now
+        if component not in self.precompute['first_moments']:
+            pi = self.pi[component]
+            weight = self.weight_means[:, component]
+            moment = (pi * weight) @ self.X
+            self.precompute['first_moments'][component] = moment
+
+        return self.precompute['first_moments'][component]
 
     @lru_cache(maxsize=2**5)
     def _compute_second_moment_hash(self, component, hash):
@@ -338,7 +344,11 @@ class IndependentFactorSER:
         pi_k = np.exp(pi_k - pi_k.max())
         pi_k = pi_k / pi_k.sum()
 
+        # update parameters
         self.pi[k] = pi_k
+
+        # pop precomputes
+        self.precompute['first_moments'].pop(k)
 
     def update_pi(self, components=None):
         """
@@ -384,6 +394,9 @@ class IndependentFactorSER:
 
         # store reasuable computations
         self.precompute['Hw'][:, k] = normal_entropy(variance)
+        
+        # pop precomputes
+        self.precompute['first_moments'].pop(k)
 
     def update_weights(self, components=None, ARD=True):
         if components is None:
@@ -475,7 +488,6 @@ class IndependentFactorSER:
                 + 0.5 * mask.sum() * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
-        
         E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
         entropy = np.einsum('ijk,jk->ij', self.precompute['Hw'], self.pi)
         lik = (
