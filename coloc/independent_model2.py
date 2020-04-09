@@ -70,6 +70,11 @@ class IndependentFactorSER:
         self.tolerance = tolerance
         self.run_time = 0
 
+
+        self.precompute = {
+            'Hw': normal_entropy(self.weight_vars)
+        }
+
     @property
     def expected_tissue_precision(self):
         """
@@ -325,8 +330,7 @@ class IndependentFactorSER:
             -0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha[:, None]
             - 0.5 * E_alpha[:, None] * E_w2)  # [T, N]
-        entropy = normal_entropy(self.weight_vars[:, k])  # [T, N]
-
+        entropy = self.precompute['Hw'][:, k]
         pi_k = (tmp1 + lik + entropy)
 
         pi_k = pi_k.sum(0)
@@ -373,8 +377,13 @@ class IndependentFactorSER:
             + self.expected_weight_precision[:, k][:, None]
         variance = 1 / precision  # [T, N]
         mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
+
+        # update params
         self.weight_vars[:, k] = variance
         self.weight_means[:, k] = mean
+
+        # store reasuable computations
+        self.precompute['Hw'][:, k] = normal_entropy(variance)
 
     def update_weights(self, components=None, ARD=True):
         if components is None:
@@ -444,46 +453,6 @@ class IndependentFactorSER:
         if verbose:
             print('cumulative run time: {}'.format(self.run_time))
 
-    def compute_elbo_new(self, residual=None):
-        """
-        copute evidence lower bound
-        """
-        expected_conditional = 0
-        KL = 0
-
-        E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
-        E_alpha = self.expected_weight_precision
-
-        E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
-        E_tau = self.expected_tissue_precision
-
-        ERSS = self._compute_ERSS(residual=residual)
-        for tissue in range(self.dims['T']):
-            mask = self._get_mask(tissue)
-            expected_conditional += \
-                - 0.5 * mask.sum() * np.log(2 * np.pi) \
-                + 0.5 * mask.sum() * E_ln_tau[tissue] \
-                - 0.5 * E_tau[tissue] * ERSS[tissue]
-
-        """
-        E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
-        entropy = np.einsum('ijk,jk->ij', normal_entropy(self.weight_vars), self.pi)
-        lik = (
-            - 0.5 * np.log(2 * np.pi)
-            + 0.5 * E_ln_alpha
-            - 0.5 * E_ln_alpha * E_w2
-        )
-        KL += lik.sum() + entropy.sum()
-        """
-        # compute E[KL q(w | z) || p(w | alpha)]
-        """
-        KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
-        KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
-        """
-        KL += np.sum(
-            [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
-        )
-        return expected_conditional - KL
 
     def compute_elbo(self, residual=None):
         """
@@ -508,23 +477,13 @@ class IndependentFactorSER:
 
         
         E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
-        entropy = np.einsum('ijk,jk->ij', normal_entropy(self.weight_vars), self.pi)
+        entropy = np.einsum('ijk,jk->ij', self.precompute['Hw'], self.pi)
         lik = (
             - 0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha
             - 0.5 * E_ln_alpha * E_w2
         )
         KL -= lik.sum() + entropy.sum()
-
-        # KL(q(W | S) || p(W)) = KL(q(W | S = 1) || p(W)) q(S = 1) + KL(p(W) || p(W)) (1 - q(S = 1))
-        """
-        KL += np.sum(
-            normal_kl(
-                self.weight_means, self.weight_vars,
-                0, 1 / self.expected_weight_precision[..., None]
-            ) * self.pi[None]
-        )
-        """
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
         KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
         KL += np.sum(
