@@ -365,6 +365,9 @@ class IndependentFactorSER:
         self.precompute['first_moments'].pop(k, None)
 
     def update_weights(self, components=None, ARD=True):
+        """
+        update weights for all components
+        """
         if components is None:
             components = np.arange(self.dims['K'])
 
@@ -372,16 +375,23 @@ class IndependentFactorSER:
             self._update_weight_component(k, ARD)
 
     def update_tissue_variance(self, residual=None):
+        """
+        update tau, controls tissue specific variance
+        """
         if residual is None:
             residual = self.compute_residual()
         ERSS = self._compute_ERSS(residual=residual)
 
-        n_samples = np.array([self._get_mask(t).sum()
-            for t in range(self.dims['T'])])
+        n_samples = np.array([
+            self._get_mask(t).sum() for t in range(self.dims['T'])
+        ])
         self.tissue_precision_a = self.c + n_samples / 2
         self.tissue_precision_b = self.d + ERSS / 2
 
     def update_covariate_weights(self):
+        """
+        update covariates
+        """
         if self.covariates is not None:
             residual = self.compute_residual(use_covariates=False)
             for tissue in self.tissue_ids:
@@ -408,13 +418,14 @@ class IndependentFactorSER:
                 residual = residual + self.compute_first_moment(l)
                 if ARD_weights:
                     self.update_ARD_weights(l)
-                if update_weights: self._update_weight_component(
-                    l, residual=residual)
-                if update_pi: self._update_pi_component(l, residual=residual)
+                if update_weights:
+                    self._update_weight_component(l, residual=residual)
+                if update_pi:
+                    self._update_pi_component(l, residual=residual)
                 residual = residual - self.compute_first_moment(l)
 
             # update variance parameters
-            if update_variance: 
+            if update_variance:
                 self.update_tissue_variance(residual=residual)
 
             # monitor convergence with ELBO
@@ -470,9 +481,16 @@ class IndependentFactorSER:
         return expected_conditional - KL
 
     def get_ld(self, snps):
+        """
+        ld matrix for subset of snps
+        snps: integer index into snp_ids
+        """
         return np.atleast_2d(np.corrcoef(self.X[snps.astype(int)]))
 
     def save(self, output_dir, model_name, save_data=False):
+        """
+        save the model
+        """
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
         if output_dir[-1] == '/':
@@ -483,7 +501,6 @@ class IndependentFactorSER:
             Y = self.__dict__.pop('Y')
 
         pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
-        
         if not save_data:
             self.__dict__['X'] = X
             self.__dict__['Y'] = Y
