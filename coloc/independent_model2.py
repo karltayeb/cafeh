@@ -77,6 +77,7 @@ class IndependentFactorSER:
 
         self.precompute = {
             'Hw': normal_entropy(self.weight_vars),
+            'Ew2': self.weight_means**2 + self.weight_vars,
             'first_moments': {},
             'diags': diags,
             'masks': masks
@@ -284,18 +285,18 @@ class IndependentFactorSER:
             r_k = residual
         r_k[mask] = 0
 
+        E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
+            - np.log(self.weight_precision_b[:, k])
+        E_alpha = self.expected_weight_precision[:, k]
+        E_w2 = self.precompute['Ew2'][:, k]
 
         # E[ln p(y | w, z, alpha , tau)]
         tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
-            + diag * (self.weight_means[:, k]**2 + self.weight_vars[:, k])
+            + diag * E_w2
         tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
 
 
         # E[ln p(w | alpha)] + H(q(w))
-        E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
-            - np.log(self.weight_precision_b[:, k])
-        E_alpha = self.expected_weight_precision[:, k]
-        E_w2 = (self.weight_means[:, k]**2 + self.weight_vars[:, k]) 
         lik = (
             -0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha[:, None]
@@ -358,7 +359,8 @@ class IndependentFactorSER:
 
         # store reasuable computations
         self.precompute['Hw'][:, k] = normal_entropy(variance)
-        
+        self.precompute['Ew2'][:, k] = mean**2 + variance
+
         # pop precomputes
         self.precompute['first_moments'].pop(k, None)
 
@@ -452,7 +454,7 @@ class IndependentFactorSER:
                 + 0.5 * mask.sum() * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
-        E_w2 = np.einsum('ijk,jk->ij', (self.weight_means**2 + self.weight_vars), self.pi)
+        E_w2 = np.einsum('ijk,jk->ij', self.precompute['Ew2'], self.pi)
         entropy = np.einsum('ijk,jk->ij', self.precompute['Hw'], self.pi)
         lik = (
             - 0.5 * np.log(2 * np.pi)
