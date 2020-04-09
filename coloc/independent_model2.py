@@ -405,31 +405,26 @@ class IndependentFactorSER:
         if components is None:
             components = np.arange(self.dims['K'])
 
-        residual = self.compute_residual(use_covariates=True)
         for i in range(max_iter):
             # update covariate weights
-            residual += self._compute_covariate_prediction(True)
             if (self.covariates is not None) and update_covariate_weights:
                 self.update_covariate_weights()
-            residual -= self._compute_covariate_prediction(True)
 
             # update component parameters
             for l in components:
-                residual = residual + self.compute_first_moment(l)
                 if ARD_weights:
                     self.update_ARD_weights(l)
                 if update_weights:
-                    self._update_weight_component(l, residual=None)
+                    self._update_weight_component(l)
                 if update_pi:
-                    self._update_pi_component(l, residual=None)
-                residual = residual - self.compute_first_moment(l)
+                    self._update_pi_component(l)
 
             # update variance parameters
             if update_variance:
-                self.update_tissue_variance(residual=None)
+                self.update_tissue_variance()
 
             # monitor convergence with ELBO
-            self.elbos.append(self.compute_elbo(residual=None))
+            self.elbos.append(self.compute_elbo())
             if verbose:
                 print("Iter {}: {}".format(i, self.elbos[-1]))
 
