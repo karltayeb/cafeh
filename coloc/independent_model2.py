@@ -419,17 +419,17 @@ class IndependentFactorSER:
                 if ARD_weights:
                     self.update_ARD_weights(l)
                 if update_weights:
-                    self._update_weight_component(l, residual=residual)
+                    self._update_weight_component(l, residual=None)
                 if update_pi:
-                    self._update_pi_component(l, residual=residual)
+                    self._update_pi_component(l, residual=None)
                 residual = residual - self.compute_first_moment(l)
 
             # update variance parameters
             if update_variance:
-                self.update_tissue_variance(residual=residual)
+                self.update_tissue_variance(residual=None)
 
             # monitor convergence with ELBO
-            self.elbos.append(self.compute_elbo(residual=residual))
+            self.elbos.append(self.compute_elbo(residual=None))
             if verbose:
                 print("Iter {}: {}".format(i, self.elbos[-1]))
 
