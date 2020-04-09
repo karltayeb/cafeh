@@ -71,16 +71,15 @@ class IndependentFactorSER:
         self.run_time = 0
 
 
-        diags = {}
-        for tissue in range(T):
-            mask = self._get_mask(tissue)
-            diags[tissue] = np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
+        masks = {t: ~np.isnan(self.Y[t]) for t in range(T)}
+        diags = {t: np.einsum(
+            'ij, ij->i', self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)}
 
         self.precompute = {
             'Hw': normal_entropy(self.weight_vars),
             'first_moments': {},
             'diags': diags,
-            'masks': {t: ~np.isnan(self.Y[t]) for t in range(T)}
+            'masks': masks
         }
 
     @property
