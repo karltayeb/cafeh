@@ -54,14 +54,14 @@ class IndependentFactorSER:
             self.cov_weights = None
 
         # hyper-parameters
-        self.a = 1e-6
-        self.b = 1e-6
+        self.a = 1e-10
+        self.b = 1e-10
 
         self.weight_precision_a = np.ones((T, K))
         self.weight_precision_b = np.ones((T, K))
 
-        self.c = 1e-6
-        self.d=1e-6
+        self.c = 1e-10
+        self.d=1e-10
 
         self.tissue_precision_a = np.ones(T)
         self.tissue_precision_b = np.ones(T)
