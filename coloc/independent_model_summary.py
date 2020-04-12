@@ -98,7 +98,7 @@ class IndependentFactorSER:
     def rX(self, k):
         sample = np.array([
             np.random.choice(self.dims['N'], p=self.pi[l])
-            for l in range(self.dims['K']) if l != l
+            for l in range(self.dims['K']) if l != k
         ]).astype(int)
         expected_effects = self.expected_effects
         if k is not None:
