@@ -94,6 +94,7 @@ class IndependentFactorSER:
         if k is not None:
             expected_effects -= self.weight_means[:, k] * self.pi[k][None]
         rX = self.YX - expected_effects @ self.XX
+        return rX
 
     @property
     def credible_sets(self):
