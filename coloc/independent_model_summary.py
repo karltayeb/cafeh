@@ -89,11 +89,21 @@ class IndependentFactorSER:
         """
         return np.einsum('ijk,jk->ik', self.weight_means, self.pi)
 
+    def _rXk(self, k):
+        if k not in self.precompute['rX']:
+            self.precompute['rX'][k] = \
+                (self.weight_means[:, k] * self.pi[k][None])
+        return self.precompute['rX']['k']
+
     def rX(self, k):
+        sample = np.array([
+            np.random.choice(self.dims['N'], p=self.pi[l])
+            for l in range(self.dims['K']) if l != l
+        ])
         expected_effects = self.expected_effects
         if k is not None:
             expected_effects -= self.weight_means[:, k] * self.pi[k][None]
-        rX = self.YX - expected_effects @ self.XX
+        rX = self.YX - expected_effects[:, sample] @ self.XX[sample]
         return rX
 
     @property
