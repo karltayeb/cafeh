@@ -133,7 +133,7 @@ class IndependentFactorSER:
 
             pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
             mu_pi = self.weight_means[t] * self.pi
-            pt2 = mu_pi @ self.XX[t] @ mu_pi.T
+            pt2 = mu_pi @ self.XX @ mu_pi.T
 
             ERSS[t] = self.yy[t]
             ERSS[t] += -2 * np.inner(self.YX[t], mu_pi.sum(0))
