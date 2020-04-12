@@ -196,60 +196,11 @@ class IndependentFactorSER:
         prediction = self.compute_prediction(k, use_covariates)
         return self.Y - prediction
 
-    def _compute_ERSS_summary(self):
-        """
-        compute ERSS using XY and XX
-        """
-        residual = self.compute_residual()
-        ERSS = np.array([
-            np.sum(residual[tissue, self._get_mask(tissue)]**2)
-            for tissue in range(self.dims['T'])
-        ])
-
-        prediction = np.sum([
-            self.compute_first_moment(k) for k in range(self.dims['K'])
-        ], axis=0)
-
-        for t in range(self.dims['T']):
-            mask = self._get_mask(t)
-            diag = self._get_diag(t)
-
-            YX = self.Y[t, mask] @ self.X.T[mask]
-            XX = self.X[:, mask] @ self.X[:, mask].T
-
-            pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
-            mu_pi = self.weight_means[t] * self.pi
-            pt2 = mu_pi @ XX @ mu_pi.T
-
-            ERSS[t] = np.inner(self.Y[t, mask], self.Y[t, mask])
-            ERSS[t] += -2 * np.inner(YX, mu_pi.sum(0))
-            ERSS[t] += pt1 + np.sum(pt2) - np.sum(np.diag(pt2))
-        return ERSS
-
-    def _compute_ERSS_old(self, residual=None):
-        if residual is None:
-            residual = self.compute_residual()
-        ERSS = np.array([np.sum(residual[tissue, self._get_mask(tissue)]**2)
-                         for tissue in range(self.dims['T'])])
-        mu = np.sum([self.compute_first_moment(k)**2
-                     for k in range(self.dims['K'])], axis=0)
-        mu2 = np.sum([self.compute_second_moment(k)
-                      for k in range(self.dims['K'])], axis=0)
-        mask = np.array([self._get_mask(t) for t in range(self.dims['T'])])
-        ERSS += ((mu2 - mu) * mask).sum(1)
-        return ERSS
-
     def _compute_ERSS(self, residual=None):
         """
         compute ERSS using XY and XX
         """
-        if residual is None:
-            residual = self.compute_residual()
-
-        ERSS = np.array([
-            np.sum(residual[tissue, self._get_mask(tissue)]**2)
-            for tissue in range(self.dims['T'])
-        ])
+        ERSS = np.zeros(self.dims['T'])
 
         prediction = self.compute_prediction(use_covariates=False)
         first_moments = np.array([
