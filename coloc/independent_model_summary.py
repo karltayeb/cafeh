@@ -96,14 +96,14 @@ class IndependentFactorSER:
         return self.precompute['rX']['k']
 
     def rX(self, k):
-        sample = np.array([
-            np.random.choice(self.dims['N'], p=self.pi[l])
+        sample = np.concatenate([
+            np.random.choice(self.dims['N'], p=self.pi[l], size=5)
             for l in range(self.dims['K']) if l != k
         ]).astype(int)
         expected_effects = self.expected_effects
         if k is not None:
             expected_effects -= self.weight_means[:, k] * self.pi[k][None]
-        rX = self.YX - expected_effects[:, sample] @ self.XX[sample]
+        rX = self.YX - (expected_effects[:, sample] @ self.XX[sample]) / 5
         return rX
 
     @property
