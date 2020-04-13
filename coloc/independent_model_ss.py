@@ -262,7 +262,7 @@ class IndependentFactorSER:
             -0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha[:, None]
             - 0.5 * E_alpha[:, None] * E_w2)  # [T, N]
-        entropy = self.precompute['Hw'][k]
+        entropy = self.compute_Hw(k)
         pi_k = (tmp1 + lik + entropy)
 
         pi_k = pi_k.sum(0)
@@ -275,6 +275,8 @@ class IndependentFactorSER:
 
         # pop precomputes
         self.precompute['first_moments'].pop(k, None)
+        self.precompute['Hw'].pop(k, None)
+        self.precompute['Ew2'].pop(k, None)
 
     def update_pi(self, components=None):
         """
