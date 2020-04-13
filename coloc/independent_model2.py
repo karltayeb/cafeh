@@ -335,7 +335,7 @@ class IndependentFactorSER:
         """
         if residual is None:
             residual = self.compute_residual()
-        ERSS = self._compute_ERSS(residual=residual)
+        ERSS = self._compute_ERSS()
 
         n_samples = np.array([
             self._get_mask(t).sum() for t in range(self.dims['T'])
@@ -407,7 +407,7 @@ class IndependentFactorSER:
         E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
         E_tau = self.expected_tissue_precision
 
-        ERSS = self._compute_ERSS(residual=residual)
+        ERSS = self._compute_ERSS()
         for tissue in range(self.dims['T']):
             mask = self._get_mask(tissue)
             expected_conditional += \
