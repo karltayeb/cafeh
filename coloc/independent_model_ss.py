@@ -77,8 +77,8 @@ class IndependentFactorSER:
             'ij, ij->i', self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)}
 
         self.precompute = {
-            'Hw': normal_entropy(self.weight_vars),
-            'Ew2': self.weight_means**2 + self.weight_vars,
+            'Hw': {},
+            'Ew2': {},
             'first_moments': {},
             'diags': diags,
             'masks': masks
