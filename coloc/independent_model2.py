@@ -196,21 +196,25 @@ class IndependentFactorSER:
         prediction = self.compute_prediction(k, use_covariates)
         return self.Y - prediction
 
-    def _compute_ERSS(self, residual=None):
+    def _compute_ERSS(self, k=None):
         """
         compute ERSS using XY and XX
         """
         ERSS = np.zeros(self.dims['T'])
 
-        prediction = self.compute_prediction(use_covariates=False)
+        prediction = self.compute_prediction(k, use_covariates=False)
         first_moments = np.array([
-            self.compute_first_moment(k) for k in range(self.dims['K'])
+            self.compute_first_moment(l)
+            for l in range(self.dims['K']) if l != k
         ])
         for t in range(self.dims['T']):
             mask = self._get_mask(t)
             diag = self._get_diag(t)
 
             pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
+            if k is not None:
+                pt1 -= np.sum(self.precompute['Ew2'][t, k] * self.pi[k] * diag)
+
             pt2 = np.inner(prediction[t, mask], prediction[t, mask])
             pt3 = np.einsum('ij,ij->i', first_moments[:, t, mask], first_moments[:, t, mask]).sum()
             ERSS[t] = np.inner(self.Y[t, mask], self.Y[t, mask])
