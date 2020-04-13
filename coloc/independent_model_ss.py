@@ -388,7 +388,7 @@ class IndependentFactorSER:
             for tissue in self.tissue_ids:
                 self._update_covariate_weights_tissue(residual, tissue)
 
-    def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_pi=True, update_variance=True, ARD_weights=False, update_covariate_weights=True):
+    def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_pi=True, update_active=True, update_variance=True, ARD_weights=False, update_covariate_weights=True):
         """
         loop through updates until convergence
         """
@@ -409,6 +409,8 @@ class IndependentFactorSER:
                     self._update_weight_component(l)
                 if update_pi:
                     self._update_pi_component(l)
+                if update_active:
+                    self._update_active_component(l)
 
             # update variance parameters
             if update_variance:
