@@ -165,10 +165,7 @@ class IndependentFactorSER:
         if component not in self.precompute['Ew2']:
             m1 = self.weight_means[:, component]
             v1 = self.weight_vars[:, component]
-            v0 = (1 / self.expected_weight_precision[:, component])[:, None]
-            active = self.active[:, component][:, None]
-            self.precompute['Ew2'][component] = \
-                (m1**2 + v1) * active + v0 * (1 - active)
+            self.precompute['Ew2'][component] = (m1**2 + v1)
         return self.precompute['Ew2'][component]
 
     def _compute_covariate_prediction(self, compute=True):
@@ -252,12 +249,12 @@ class IndependentFactorSER:
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision[:, k]
-        E_w2 = self.precompute['Ew2'][:, k]
+        E_w2 = self.precompute['Ew2'][k]
 
         # E[ln p(y | w, z, alpha , tau)]
         tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
             + diag * E_w2
-        tmp1 = -0.5 * self.expected_tissue_precision[:, None] * tmp1
+        tmp1 *= -0.5 * (self.expected_tissue_precision * self.active[:, k])[:, None]
 
 
         # E[ln p(w | alpha)] + H(q(w))
