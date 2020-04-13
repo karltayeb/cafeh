@@ -359,7 +359,7 @@ class IndependentFactorSER:
         tmp1 = -0.5 * self.expected_tissue_precision * tmp1
 
         tmp2 = -0.5 * self.expected_weight_precision[:, k] * (self.compute_Ew2(k) @ self.pi[k]) \
-            + normal_entropy(self.weight_vars[:, k] @ self.pi[k])
+            + normal_entropy(self.weight_vars[:, k]) @ self.pi[k]
 
         a = tmp1 + tmp2
         b = -0.5 + normal_entropy(1 / self.expected_weight_precision[:, k])
