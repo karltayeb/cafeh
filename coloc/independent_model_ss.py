@@ -150,7 +150,7 @@ class IndependentFactorSER:
         """
         compute entropy of q(w)
         """
-        if component not in self.precompute['Ew2']:
+        if component not in self.precompute['Hw']:
             v1 = self.weight_vars[:, component]
             v0 = (1 / self.expected_weight_precision[:, component])[:, None]
             active = self.active[:, component][:, None]
