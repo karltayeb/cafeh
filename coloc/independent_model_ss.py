@@ -422,10 +422,10 @@ class IndependentFactorSER:
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
         Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])])
-        E_w2 = np.einsum('kij,jk->ij', Ew2, self.pi)
+        E_w2 = np.einsum('jik,jk->ij', Ew2, self.pi)
 
         Hw = np.array([self.compute_Hw(k) for k in range(self.dims['K'])])
-        entropy = np.einsum('kij,jk->ij', Hw, self.pi)
+        entropy = np.einsum('jik,jk->ij', Hw, self.pi)
 
         lik = (
             - 0.5 * np.log(2 * np.pi)
