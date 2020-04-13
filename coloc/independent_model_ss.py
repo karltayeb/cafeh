@@ -220,7 +220,8 @@ class IndependentFactorSER:
                 for k in range(self.dims['K'])
             ])
             if k is not None:
-                pt1 -= np.sum(self.compute_Ew2(k)[t] * self.pi[k] * diag)
+                pt1 -= np.sum(self.compute_Ew2(k)[t]
+                              * self.active[t, k] * self.pi[k] * diag)
 
             pt2 = np.inner(prediction[t, mask], prediction[t, mask])
             pt3 = np.einsum('ij,ij->i', first_moments[:, t, mask], first_moments[:, t, mask]).sum()
