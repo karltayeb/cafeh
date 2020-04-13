@@ -472,11 +472,10 @@ class IndependentFactorSER:
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
 
-        """
         KL += np.sum([
-            bernoulli_kl(self.active[:, k], self.prior_activity[k]) for k in range(self.dims['K'])
+            bernoulli_kl(self.active[:, k], self.prior_activity[k])
+            for k in range(self.dims['K'])
         ])
-        """
         return expected_conditional - KL
 
     def get_ld(self, snps):
