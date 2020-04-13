@@ -471,7 +471,7 @@ class IndependentFactorSER:
             - 0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha
             - 0.5 * E_alpha * E_w2 * self.active
-            + 0.5 * self.pi.sum(1)[None] * (1 - self.active)
+            - 0.5 * (1 - self.active)
         )
 
         KL -= lik.sum() + entropy.sum()
