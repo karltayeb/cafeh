@@ -215,7 +215,9 @@ class IndependentFactorSER:
             diag = self._get_diag(t)
 
             pt1 = np.sum([
-                self.compute_Ew2(k) * (self.pi[k] * diag)[None]
+                self.compute_Ew2(k)
+                * self.active[:, k][:, None]
+                * (self.pi[k] * diag)[None]
                 for k in range(self.dims['K'])
             ])
             if k is not None:
