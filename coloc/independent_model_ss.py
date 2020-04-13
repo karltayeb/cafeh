@@ -362,8 +362,7 @@ class IndependentFactorSER:
             + normal_entropy(self.weight_vars[:, k] @ self.pi[k])
 
         a = tmp1 + tmp2
-        b = -0.5 * normal_entropy(1 / self.expected_weight_precision[:, k])
-        
+        b = 0 # -0.5 * normal_entropy(1 / self.expected_weight_precision[:, k])
 
         # update params
         self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
