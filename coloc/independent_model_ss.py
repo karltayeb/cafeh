@@ -38,8 +38,8 @@ class IndependentFactorSER:
         self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
         self.sample_ids = sample_ids if (sample_ids is not None) else np.arange(M)
 
-        self.prior_precision = np.ones((T, K))
         self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
+        self.prior_activity = np.ones(K) * 0.01
 
         # initialize latent vars
         self.weight_means = np.zeros((T, K, N))
@@ -99,6 +99,13 @@ class IndependentFactorSER:
         return self.weight_precision_a / self.weight_precision_b
 
     @property
+    def expected_log_odds(self):
+        """
+        computed expected effect size E[zw] [T, N]
+        """
+        return np.log(self.prior_activity) - np.log(1 - self.prior_activity)
+
+    @property
     def expected_effects(self):
         """
         computed expected effect size E[zw] [T, N]
@@ -140,8 +147,8 @@ class IndependentFactorSER:
         # if its not computed, compute now
         if component not in self.precompute['first_moments']:
             pi = self.pi[component]
-            weight = self.weight_means[:, component] * self.active[:, component][:, None]
-            moment = (pi * weight) @ self.X
+            weight = self.weight_means[:, component]
+            moment = ((pi * weight) @ self.X) * self.active[:, component][:, None]
             self.precompute['first_moments'][component] = moment
 
         return self.precompute['first_moments'][component]
@@ -337,6 +344,28 @@ class IndependentFactorSER:
         for k in components:
             self._update_weight_component(k, ARD)
 
+
+    def _update_active_component(self, k):
+        """
+        update active
+        """
+        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])  # T x N
+        r_k = self.compute_residual(k)
+        r_k[np.isnan(self.Y)] = 0
+
+        p_k = self.compute_first_moment(k) / self.active[:, k][:, None]
+
+        tmp1 = -2 * np.einsum('ij,ij->i', r_k, p_k) + (self.compute_Ew2(k) * diag) @ self.pi[k]
+        tmp1 = -0.5 * self.expected_tissue_precision * tmp1
+
+        tmp2 = -0.5 * self.expected_weight_precision[:, k] * (self.compute_Ew2(k) @ self.pi[k]) \
+            + normal_entropy(self.weight_vars[:, k] @ self.pi[k])
+
+        a = tmp1 + tmp2
+        b = -0.5 * normal_entropy(1 / self.expected_weight_precision[:, k])
+        log_odds = np.log(p) - np.log(1-p)
+        self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
+
     def update_tissue_variance(self, residual=None):
         """
         update tau, controls tissue specific variance
@@ -441,6 +470,10 @@ class IndependentFactorSER:
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
+
+        KL += np.sum([
+            bernoulli_kl(self.active[:, k], self.prior_activity[k]) for k in range(self.dims['K'])
+        ])
         return expected_conditional - KL
 
     def get_ld(self, snps):
