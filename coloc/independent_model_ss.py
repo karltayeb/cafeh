@@ -271,7 +271,7 @@ class IndependentFactorSER:
             -0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha[:, None]
             - 0.5 * E_alpha[:, None] * E_w2 * self.active[:, k][:, None])  # [T, N]
-        entropy = normal_entropy(self.weight_vars[:, k] @ self.pi[k]) * self.active[:, k][:, None]# self.compute_Hw(k)
+        entropy = normal_entropy(self.weight_vars[:, k]) * self.active[:, k][:, None]# self.compute_Hw(k)
         pi_k = (tmp1 + lik + entropy)
 
         pi_k = pi_k.sum(0)
