@@ -363,7 +363,6 @@ class IndependentFactorSER:
 
         a = tmp1 + tmp2
         b = -0.5 * normal_entropy(1 / self.expected_weight_precision[:, k])
-        log_odds = np.log(p) - np.log(1-p)
         self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
 
     def update_tissue_variance(self, residual=None):
