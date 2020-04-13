@@ -249,7 +249,7 @@ class IndependentFactorSER:
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision[:, k]
-        E_w2 = self.precompute['Ew2'][k]
+        E_w2 = self.compute_Ew2(k)
 
         # E[ln p(y | w, z, alpha , tau)]
         tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
