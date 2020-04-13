@@ -302,7 +302,7 @@ class IndependentFactorSER:
         """
         ARD update for weights
         """
-        second_moment = self.compute_Ew2(k) @ self.pi[k] * self.active[:, k]
+        second_moment = self.compute_Ew2(k) @ self.pi[k] # * self.active[:, k]
         alpha = self.a + 0.5
         beta = self.b + second_moment / 2
         self.weight_precision_a[:, k] = alpha
