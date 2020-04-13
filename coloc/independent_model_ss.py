@@ -39,7 +39,7 @@ class IndependentFactorSER:
         self.sample_ids = sample_ids if (sample_ids is not None) else np.arange(M)
 
         self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
-        self.prior_activity = np.ones(K) * 0.01
+        self.prior_activity = np.ones(K) * 0.5
 
         # initialize latent vars
         self.weight_means = np.zeros((T, K, N))
@@ -363,7 +363,15 @@ class IndependentFactorSER:
 
         a = tmp1 + tmp2
         b = -0.5 * normal_entropy(1 / self.expected_weight_precision[:, k])
+        
+
+        # update params
         self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
+
+        # pop precomputes
+        self.precompute['first_moments'].pop(k, None)
+        self.precompute['Hw'].pop(k, None)
+        self.precompute['Ew2'].pop(k, None)
 
     def update_tissue_variance(self, residual=None):
         """
