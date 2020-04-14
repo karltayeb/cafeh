@@ -116,12 +116,12 @@ class IndependentFactorSER:
             self.precompute['Ew2'][component] = (m1**2 + v1)
         return self.precompute['Ew2'][component]
 
-    def rX(self, k):
 
+    def rX(self, k):
         expected_effects = self.expected_effects
         if k is not None:
             expected_effects -= self.weight_means[:, k] * self.pi[k][None]
-        rX = self.YX - (expected_effects * self.n_samples[:, None]) @ (self.U @ self.U.T)
+        rX = self.YX - ((expected_effects * self.n_samples[:, None]) @ self.U) @ self.U.T
         return rX
 
     @property
