@@ -5,6 +5,7 @@ import os, sys, pickle
 from scipy.special import digamma
 from .utils import np_cache_class, gamma_logpdf
 from functools import lru_cache
+import pandas as pd
 import time
 
 class IndependentFactorSER:
@@ -27,7 +28,7 @@ class IndependentFactorSER:
         # set data
         self.X = X
         self.Y = Y
-        self.covariates = covariates
+        self.covariates = pd.concat(covariates, sort=True).fillna(0)
 
         # set priors
         T, M = Y.shape
@@ -47,9 +48,7 @@ class IndependentFactorSER:
         self.pi = np.ones((K, N)) / N
 
         if self.covariates is not None:
-            self.cov_weights = {tissue: np.zeros((covariates[tissue].shape[0])) for tissue in self.tissue_ids}
-            self.sample_covariate_map = {tissue: np.isin(
-                self.sample_ids, self.covariates[tissue].columns) for tissue in self.tissue_ids}
+            self.cov_weights = {t: self.covariates.loc[t].shape[0]}
         else:
             self.cov_weights = None
 
@@ -190,12 +189,11 @@ class IndependentFactorSER:
         compute is a boolean of whether to predict or return 0
             exists to clean up stuff in compute_prediction
         """
-        prediction = np.zeros_like(self.Y)
+        prediction = []
         if (self.covariates is not None) and compute:
             for i, tissue in enumerate(self.tissue_ids):
-                prediction[i, self.sample_covariate_map[tissue]] = \
-                    self.cov_weights[tissue] @ self.covariates[tissue].values
-        return prediction
+                prediction.append(self.cov_weights[tissue] @ self.covariates.loc[tissue].values)
+        return np.array(prediction)
 
     def compute_prediction(self, k=None, use_covariates=True):
         """
@@ -242,9 +240,13 @@ class IndependentFactorSER:
         return ERSS
 
     def _update_covariate_weights_tissue(self, residual, tissue):
-        weights = np.zeros_like(self.cov_weights[tissue])
-        Y = np.squeeze(residual[self.tissue_ids == tissue, self.sample_covariate_map[tissue]])
-        X = self.covariates[tissue].values
+        """
+        update covariates
+        nans are masked with 0s-- same as filtering down to relevant
+        samples
+        """
+        Y = np.squeeze(residual[self.tissue_ids == tissue])
+        X = self.covariates.loc[tissue].fillna(0).values
         self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
 
     def _update_pi_component(self, k, residual=None):
