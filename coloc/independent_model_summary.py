@@ -116,7 +116,6 @@ class IndependentFactorSER:
             self.precompute['Ew2'][component] = (m1**2 + v1)
         return self.precompute['Ew2'][component]
 
-
     def rX(self, k):
         expected_effects = self.expected_effects
         if k is not None:
@@ -145,24 +144,23 @@ class IndependentFactorSER:
         """
         return self.precompute['diags'][tissue]
 
-    def compute_residual(self, k=None):
-        """
-        computes expected residual
-        """
-        pass
-
     def _compute_ERSS(self):
         """
         compute ERSS using XY and XX
         """
+
+        # [K, T, N]
+        Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])])
+        E_w2 = np.einsum('ktn,kn->tn', Ew2, self.pi)
+
         ERSS = np.zeros(self.dims['T'])
         for t in range(self.dims['T']):
             diag = self._get_diag(t)
 
-            pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
-            mu_pi = self.weight_means[t] * self.pi
+            pt1 = E_w2[t].sum() * self.n_samples[t]
 
             # mu_pi @ self.XX @ mu_pi
+            mu_pi = self.weight_means[t] * self.pi
             pt2 = mu_pi @ (self.U * np.sqrt(diag)[:, None])
             pt2 = np.inner(pt2, pt2)
 
