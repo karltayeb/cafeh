@@ -77,12 +77,19 @@ class IndependentFactorSER:
         diags = {t: np.einsum(
             'ij, ij->i', self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)}
 
+        if covariates is not None:
+            cov_pinv = {t: np.linalg.pinv(self.covariates.loc[t].values.T) for t in self.tissue_ids}
+        else:
+            cov = {}
+
         self.precompute = {
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
             'diags': diags,
-            'masks': masks
+            'masks': masks,
+            'cov_pinv': cov_pinv,
+            'covariate_prediction': {}
         }
 
     @property
@@ -253,7 +260,7 @@ class IndependentFactorSER:
         samples
         """
         Y = np.squeeze(residual[self.tissue_ids == tissue])
-        X = self.covariates.loc[tissue].fillna(0).values
+        X = self.precompute['cov_pinv'][tissue]
         self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
 
     def _update_pi_component(self, k, residual=None):
