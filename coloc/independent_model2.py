@@ -49,7 +49,7 @@ class IndependentFactorSER:
 
         if self.covariates is not None:
             self.cov_weights = {
-                t: self.covariates.loc[t].shape[0]
+                t: np.zeros(self.covariates.loc[t].shape[0])
                 for t in self.tissue_ids
             }
         else:
