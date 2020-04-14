@@ -73,6 +73,7 @@ class IndependentFactorSER:
             'Ew2': {},
             'first_moments': {},
             'diags': diags
+            'rX': {}
         }
 
     @property
@@ -159,6 +160,8 @@ class IndependentFactorSER:
 
             pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
             mu_pi = self.weight_means[t] * self.pi
+
+            # mu_pi @ self.XX @ mu_pi
             pt2 = mu_pi @ self.U
             pt2 = np.inner(pt2, pt2)
 
