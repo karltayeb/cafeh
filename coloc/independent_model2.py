@@ -214,8 +214,7 @@ class IndependentFactorSER:
         compute expected prediction
         """
         prediction = self._compute_covariate_prediction(use_covariates)
-
-        prediction = np.sum([
+        prediction += np.sum([
             self.compute_first_moment(l) for l in range(self.dims['K']) if l != k
         ], axis=0)
         return prediction
