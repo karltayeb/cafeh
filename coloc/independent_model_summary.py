@@ -72,7 +72,7 @@ class IndependentFactorSER:
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
-            'diags': diags
+            'diags': diags,
             'rX': {}
         }
 
@@ -301,7 +301,6 @@ class IndependentFactorSER:
         self.run_time += cur_time - init_time
         if verbose:
             print('cumulative run time: {}'.format(self.run_time))
-
 
     def compute_elbo(self):
         """
