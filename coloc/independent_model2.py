@@ -196,7 +196,10 @@ class IndependentFactorSER:
         if (self.covariates is not None) and compute:
             for i, tissue in enumerate(self.tissue_ids):
                 prediction.append(self.cov_weights[tissue] @ self.covariates.loc[tissue].values)
-        return np.array(prediction)
+            prediction = np.array(prediction)
+        else:
+            prediction = np.zeros_like(self.Y)
+        return prediction
 
     def compute_prediction(self, k=None, use_covariates=True):
         """
