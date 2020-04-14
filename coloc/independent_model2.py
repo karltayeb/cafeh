@@ -261,8 +261,8 @@ class IndependentFactorSER:
         """
         Y = np.squeeze(residual[self.tissue_ids == tissue])
         Y[np.isnan(Y)] = 0
-        X = self.precompute['cov_pinv'][tissue]
-        self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
+        pinvX = self.precompute['cov_pinv'][tissue]
+        self.cov_weights[tissue] = pinvX @ Y
 
     def _update_pi_component(self, k, residual=None):
         """
