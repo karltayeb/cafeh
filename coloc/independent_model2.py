@@ -48,7 +48,10 @@ class IndependentFactorSER:
         self.pi = np.ones((K, N)) / N
 
         if self.covariates is not None:
-            self.cov_weights = {t: self.covariates.loc[t].shape[0]}
+            self.cov_weights = {
+            t: self.covariates.loc[t].shape[0]
+            for t in self.tissue_ids
+        }
         else:
             self.cov_weights = None
 
