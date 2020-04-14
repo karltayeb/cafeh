@@ -348,7 +348,7 @@ class IndependentFactorSER:
         ld matrix for subset of snps
         snps: integer index into snp_ids
         """
-        return self.XX[snps][:, snps]
+        return self.LD[snps][:, snps]
 
     def save(self, output_dir, model_name, save_data=False):
         """
