@@ -11,7 +11,7 @@ class IndependentFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, get_expected_weights, check_convergence
 
-    def __init__(self, XX, YX, yy, n_samples, K, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
+    def __init__(self, XX, YX, yy, n_samples, K, U=None, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
         """
         Y [T x M] expresion for tissue, individual
         X [N x M] genotype for snp, individual
@@ -27,6 +27,13 @@ class IndependentFactorSER:
         self.YX = YX
         self.yy = yy
         self.n_samples = n_samples
+
+        if U is None:
+            u, s, _ = np.linalg.svd(XX, hermitian=True)
+            m = (~np.isclose(s, 0)).sum()
+            U = u[:, :m] * s[:m]
+
+        self.U = U
 
         # set priors
         T, N = YX.shape
@@ -93,7 +100,7 @@ class IndependentFactorSER:
         expected_effects = self.expected_effects
         if k is not None:
             expected_effects -= self.weight_means[:, k] * self.pi[k][None]
-        rX = self.YX - expected_effects @ self.XX
+        rX = self.YX - expected_effects @ self.U @ self.U.T
         return rX
 
     @property
