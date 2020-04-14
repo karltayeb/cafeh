@@ -192,6 +192,7 @@ class IndependentFactorSER:
         compute is a boolean of whether to predict or return 0
             exists to clean up stuff in compute_prediction
         """
+
         prediction = []
         if (self.covariates is not None) and compute:
             for i, tissue in enumerate(self.tissue_ids):
