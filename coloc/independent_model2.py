@@ -76,8 +76,8 @@ class IndependentFactorSER:
             'ij, ij->i', self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)}
 
         self.precompute = {
-            'Hw': normal_entropy(self.weight_vars),
-            'Ew2': self.weight_means**2 + self.weight_vars,
+            'Hw': {},
+            'Ew2': {},
             'first_moments': {},
             'diags': diags,
             'masks': masks
@@ -103,6 +103,25 @@ class IndependentFactorSER:
         computed expected effect size E[zw] [T, N]
         """
         return np.einsum('ijk,jk->ik', self.weight_means, self.pi)
+
+    def compute_Hw(self, component):
+        """
+        compute entropy of q(w)
+        """
+        if component not in self.precompute['Hw']:
+            v1 = self.weight_vars[:, component]
+            self.precompute['Hw'][component] = normal_entropy(v1)
+        return self.precompute['Hw'][component]
+
+    def compute_Ew2(self, component):
+        """
+        compute second moment of q(w)
+        """
+        if component not in self.precompute['Ew2']:
+            m1 = self.weight_means[:, component]
+            v1 = self.weight_vars[:, component]
+            self.precompute['Ew2'][component] = (m1**2 + v1)
+        return self.precompute['Ew2'][component]
 
     @property
     def credible_sets(self):
@@ -213,7 +232,7 @@ class IndependentFactorSER:
 
             pt1 = np.sum((self.weight_means[t] ** 2 + self.weight_vars[t]) * self.pi * diag)
             if k is not None:
-                pt1 -= np.sum(self.precompute['Ew2'][t, k] * self.pi[k] * diag)
+                pt1 -= np.sum(self.compute_Ew2(k)[t] * self.pi[k] * diag)
 
             pt2 = np.inner(prediction[t, mask], prediction[t, mask])
             pt3 = np.einsum('ij,ij->i', first_moments[:, t, mask], first_moments[:, t, mask]).sum()
@@ -243,7 +262,7 @@ class IndependentFactorSER:
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision[:, k]
-        E_w2 = self.precompute['Ew2'][:, k]
+        E_w2 = self.compute_Ew2(k)
 
         # E[ln p(y | w, z, alpha , tau)]
         tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
@@ -256,7 +275,7 @@ class IndependentFactorSER:
             -0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha[:, None]
             - 0.5 * E_alpha[:, None] * E_w2)  # [T, N]
-        entropy = self.precompute['Hw'][:, k]
+        entropy = self.compute_Hw(k)
         pi_k = (tmp1 + lik + entropy)
 
         pi_k = pi_k.sum(0)
@@ -269,6 +288,8 @@ class IndependentFactorSER:
 
         # pop precomputes
         self.precompute['first_moments'].pop(k, None)
+        self.precompute['Hw'].pop(k, None)
+        self.precompute['Ew2'].pop(k, None)
 
     def update_pi(self, components=None):
         """
@@ -312,12 +333,10 @@ class IndependentFactorSER:
         self.weight_vars[:, k] = variance
         self.weight_means[:, k] = mean
 
-        # store reasuable computations
-        self.precompute['Hw'][:, k] = normal_entropy(variance)
-        self.precompute['Ew2'][:, k] = mean**2 + variance
-
         # pop precomputes
         self.precompute['first_moments'].pop(k, None)
+        self.precompute['Hw'].pop(k, None)
+        self.precompute['Ew2'].pop(k, None)
 
     def update_weights(self, components=None, ARD=True):
         """
@@ -415,8 +434,12 @@ class IndependentFactorSER:
                 + 0.5 * mask.sum() * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
-        E_w2 = np.einsum('ijk,jk->ij', self.precompute['Ew2'], self.pi)
-        entropy = np.einsum('ijk,jk->ij', self.precompute['Hw'], self.pi)
+        Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])])
+        E_w2 = np.einsum('jik,jk->ij', Ew2, self.pi)
+
+        Hw = np.array([self.compute_Hw(k) for k in range(self.dims['K'])])
+        entropy = np.einsum('jik,jk->ij', Hw, self.pi)
+
         lik = (
             - 0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha
