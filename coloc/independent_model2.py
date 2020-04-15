@@ -177,26 +177,6 @@ class IndependentFactorSER:
 
         return self.precompute['first_moments'][component]
 
-    @lru_cache(maxsize=2**5)
-    def _compute_second_moment_hash(self, component, hash):
-        """
-        compute E[(Xzw)^2] for a component
-        """
-        pi = self.pi[component]
-        weight = self.weight_means[:, component]
-        var = self.weight_vars[:, component]
-        return (pi * (weight**2 + var)) @ self.X**2
-
-    def compute_second_moment(self, component):
-        """
-        compute E[(Xzw)^2] for a component
-        """
-        pi = self.pi[component]
-        weight = self.weight_means[:, component]
-        var = self.weight_vars[:, component]
-        h = (pi @ (weight + var**2).T).tobytes()
-        return self._compute_second_moment_hash(component, h)
-
     def compute_covariate_prediction(self, compute=True):
         """
         predict from covariates
