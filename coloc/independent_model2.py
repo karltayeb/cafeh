@@ -84,7 +84,7 @@ class IndependentFactorSER:
         if covariates is not None:
             cov_pinv = {t: np.linalg.pinv(self.covariates.loc[t].values.T) for t in self.tissue_ids}
         else:
-            cov = {}
+            cov_pinv = {}
 
         self.precompute = {
             'Hw': {},
