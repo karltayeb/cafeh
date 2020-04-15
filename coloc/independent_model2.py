@@ -255,7 +255,7 @@ class IndependentFactorSER:
             pt3 = np.einsum('ij,ij->i', first_moments[:, t, mask], first_moments[:, t, mask]).sum()
 
             ERSS[t] = np.inner(covariate_residual[t, mask], covariate_residual[t, mask])
-            ERSS[t] += -2 * np.inner(self.Y[t, mask], prediction[t, mask])
+            ERSS[t] += -2 * np.inner(covariate_residual[t, mask], prediction[t, mask])
             ERSS[t] += pt1 + np.sum(pt2) - pt3
         return ERSS
 
