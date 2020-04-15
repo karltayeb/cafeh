@@ -62,7 +62,7 @@ class IndependentFactorSER:
         self.weight_precision_b = np.ones((T, K))
 
         self.c = 1e-10
-        self.d=1e-10
+        self.d = 1e-10
 
         self.tissue_precision_a = np.ones(T)
         self.tissue_precision_b = np.ones(T)

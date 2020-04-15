@@ -28,7 +28,7 @@ class IndependentFactorSER:
         # set data
         self.X = X
         self.Y = Y
-        self.covariates = pd.concat(covariates, sort=True).fillna(0)
+        self.covariates = covariates.fillna(0)
 
         # set priors
         T, M = Y.shape
