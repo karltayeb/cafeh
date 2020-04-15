@@ -89,7 +89,6 @@ class IndependentFactorSER:
             'diags': diags,
             'masks': masks,
             'cov_pinv': cov_pinv,
-            'covariate_prediction': {}
         }
 
     @property
@@ -200,14 +199,17 @@ class IndependentFactorSER:
             exists to clean up stuff in compute_prediction
         """
 
-        prediction = []
-        if (self.covariates is not None) and compute:
-            for i, tissue in enumerate(self.tissue_ids):
-                prediction.append(self.cov_weights[tissue] @ self.covariates.loc[tissue].values)
-            prediction = np.array(prediction)
-        else:
-            prediction = np.zeros_like(self.Y)
-        return prediction
+        if 'covariate_prediction' not in self.precompute:
+            prediction = []
+            if (self.covariates is not None) and compute:
+                for i, tissue in enumerate(self.tissue_ids):
+                    prediction.append(self.cov_weights[tissue] @ self.covariates.loc[tissue].values)
+                prediction = np.array(prediction)
+            else:
+                prediction = np.zeros_like(self.Y)
+            self.precompute['covariate_prediction'] = prediction
+
+        return self.precompute['covariate_prediction']
 
     def compute_prediction(self, k=None, use_covariates=True):
         """
@@ -262,6 +264,7 @@ class IndependentFactorSER:
         Y[np.isnan(Y)] = 0
         pinvX = self.precompute['cov_pinv'][tissue]
         self.cov_weights[tissue] = pinvX @ Y
+        self.precompute.pop('covariate_prediction', None)
 
     def _update_pi_component(self, k, residual=None):
         """
