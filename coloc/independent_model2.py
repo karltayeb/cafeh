@@ -197,7 +197,7 @@ class IndependentFactorSER:
         h = (pi @ (weight + var**2).T).tobytes()
         return self._compute_second_moment_hash(component, h)
 
-    def _compute_covariate_prediction(self, compute=True):
+    def compute_covariate_prediction(self, compute=True):
         """
         predict from covariates
         compute is a boolean of whether to predict or return 0
@@ -217,7 +217,7 @@ class IndependentFactorSER:
         """
         compute expected prediction
         """
-        prediction = self._compute_covariate_prediction(use_covariates)
+        prediction = self.compute_covariate_prediction(use_covariates)
         prediction += np.sum([
             self.compute_first_moment(l) for l in range(self.dims['K']) if l != k
         ], axis=0)
@@ -241,6 +241,8 @@ class IndependentFactorSER:
             self.compute_first_moment(l)
             for l in range(self.dims['K']) if l != k
         ])
+
+        covariate_residual = self.Y - self.compute_covariate_prediction()
         for t in range(self.dims['T']):
             mask = self._get_mask(t)
             diag = self._get_diag(t)
@@ -251,7 +253,8 @@ class IndependentFactorSER:
 
             pt2 = np.inner(prediction[t, mask], prediction[t, mask])
             pt3 = np.einsum('ij,ij->i', first_moments[:, t, mask], first_moments[:, t, mask]).sum()
-            ERSS[t] = np.inner(self.Y[t, mask], self.Y[t, mask])
+
+            ERSS[t] = np.inner(covariate_residual[t, mask], covariate_residual[t, mask])
             ERSS[t] += -2 * np.inner(self.Y[t, mask], prediction[t, mask])
             ERSS[t] += pt1 + np.sum(pt2) - pt3
         return ERSS
