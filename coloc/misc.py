@@ -42,8 +42,9 @@ def make_gtex_genotype_data_dict(expression_path, genotype_path):
 
 def load_model(model_path, load_data=False):
     gene = model_path.split('/')[-2]
-    expression_path = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/chr16/{}/{}.expression'.format(gene, gene)
-    genotype_path = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/chr16/{}/{}.raw'.format(gene, gene)
+    base_path = '/'.join(model_path.split('/')[:1])
+    expression_path = '{}/{}/{}.expression'.format(base_path, gene, gene)
+    genotype_path = '{}/{}/{}.raw'.format(base_path, gene, gene)
 
     model = pickle.load(open(model_path, 'rb'))
 
@@ -60,8 +61,9 @@ def load_model(model_path, load_data=False):
 
 def repair_model(model_path):
     gene = model_path.split('/')[-2]
-    expression_path = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/chr16/{}/{}.expression'.format(gene, gene)
-    genotype_path = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/chr16/{}/{}.raw'.format(gene, gene)
+    base_path = '/'.join(model_path.split('/')[:1])
+    expression_path = '{}/{}/{}.expression'.format(base_path, gene, gene)
+    genotype_path = '{}/{}/{}.raw'.format(base_path, gene, gene)
 
     X = make_gtex_genotype_data_dict(expression_path, genotype_path)['X']
 
