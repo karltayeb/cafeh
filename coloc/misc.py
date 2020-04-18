@@ -49,9 +49,9 @@ def load_model(model_path, load_data=False):
 
     model.weight_means = np.zeros((model.dims['T'],model.dims['K'],model.dims['N']))
     model.weight_vars = np.ones((model.dims['T'],model.dims['K'],model.dims['N']))
-    
-    model.weight_means[:, :, model.snp_subset] = model.records['mini_wm']
-    model.weight_vars[:, :, model.snp_subset] = model.records['mini_wv']
+
+    model.weight_means[:, :, model.records['snp_subset']] = model.records['mini_wm']
+    model.weight_vars[:, :, model.records['snp_subset']] = model.records['mini_wv']
 
     if load_data:
         data = make_gtex_genotype_data_dict(expression_path, genotype_path)
