@@ -46,8 +46,8 @@ def load_model(model_path, load_data=False):
     genotype_path = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/chr16/{}/{}.raw'.format(gene, gene)
 
     model = pickle.load(open(model_path, 'rb'))
-    model.weight_means[:, :, model.snp_subset] = model.record['mini_wm']
-    model.weight_vars[:, :, model.snp_subset] = model.record['mini_wv']
+    model.weight_means[:, :, model.snp_subset] = model.records['mini_wm']
+    model.weight_vars[:, :, model.snp_subset] = model.records['mini_wv']
 
     if load_data:
         data = make_gtex_genotype_data_dict(expression_path, genotype_path)
