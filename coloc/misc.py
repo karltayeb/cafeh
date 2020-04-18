@@ -58,6 +58,35 @@ def load_model(model_path, load_data=False):
         model.__dict__.update(data)
     return model
 
+def repair_model(model_path):
+    gene = model_path.split('/')[-2]
+    expression_path = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/chr16/{}/{}.expression'.format(gene, gene)
+    genotype_path = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/chr16/{}/{}.raw'.format(gene, gene)
+
+    X = make_gtex_genotype_data_dict(expression_path, genotype_path)['X']
+
+    model = pickle.load(open(model_path, 'rb'))
+    PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
+    mask = (PIP > 0.01)
+    credible_sets, purity = model.record_credible_sets
+    active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])
+    records = {
+        'active': active,
+        'purity': purity,
+        'credible_sets': credible_sets,
+        'EXz': model.pi @ X,
+        'mini_wm': model.mini_weight_means,
+        'mini_wv': model.mini_weight_vars,
+        'snp_subset': mask
+    }
+    model.records = records
+    model.__dict__.pop('precompute', None)
+    model.__dict__.pop('weight_vars', None)
+    model.__dict__.pop('weight_means', None)
+    model.__dict__.pop('X', None)
+    model.__dict__.pop('Y', None)
+    model.__dict__.pop('covariates', None)
+    pickle.dump(model, open(model_path, 'wb'))
 
 def compute_pip(model):
     active = model.records['active']
