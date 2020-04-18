@@ -77,7 +77,7 @@ def plot_components(model, figsize=(15,5)):
     ax[1].scatter(pos, pip, c='k', marker='x')
 
     for k in np.arange(model.dims['K'])[active]:
-        color_snps = np.isin(model.snp_ids, model.record_credible_sets[0][k])
+        color_snps = np.isin(model.snp_ids, model.records['credible_sets'][k])
         ax[1].scatter(pos[color_snps], pip[color_snps], s=100, marker='o', alpha=0.5, label='component {}'.format(k))
 
     ax[1].set_xlabel('position')
