@@ -59,16 +59,14 @@ def load_model(model_path, load_data=False):
     return model
 
 
-def compute_pip(model, active):
-    if active is None:
-        active = np.array([1 > 0 for k in range(model.dims['K'])])
+def compute_pip(model):
+    active = model.records['active']
     return 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
 
 
 def plot_components(model, figsize=(15,5)):
-    p = model.record_credible_sets[1]
-    active = np.array([p[k] > 0.5 for k in range(model.dims['K'])])
-    pip = compute_pip(model, active)
+    active = model.records['active']
+    pip = compute_pip(model)
 
     fig, ax = plt.subplots(1, 2, figsize=figsize)
     sns.heatmap(
@@ -88,4 +86,3 @@ def plot_components(model, figsize=(15,5)):
     ax[0].set_title('expected effect size')
     ax[1].set_title('PIP')
     plt.legend()
-
