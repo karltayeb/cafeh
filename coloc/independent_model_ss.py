@@ -48,9 +48,10 @@ class IndependentFactorSER:
         self.active = np.ones((T, K))
 
         if self.covariates is not None:
-            self.cov_weights = {tissue: np.zeros((covariates[tissue].shape[0])) for tissue in self.tissue_ids}
-            self.sample_covariate_map = {tissue: np.isin(
-                self.sample_ids, self.covariates[tissue].columns) for tissue in self.tissue_ids}
+            self.cov_weights = {
+                t: np.zeros(self.covariates.loc[t].shape[0])
+                for t in self.tissue_ids
+            }
         else:
             self.cov_weights = None
 
@@ -76,12 +77,19 @@ class IndependentFactorSER:
         diags = {t: np.einsum(
             'ij, ij->i', self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)}
 
+        if covariates is not None:
+            cov_pinv = {t: np.linalg.pinv(self.covariates.loc[t].values.T) for t in self.tissue_ids}
+        else:
+            cov_pinv = {}
+
         self.precompute = {
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
             'diags': diags,
-            'masks': masks
+            'masks': masks,
+            'cov_pinv': cov_pinv,
+            'covariate_prediction': {}
         }
 
     @property
@@ -181,11 +189,14 @@ class IndependentFactorSER:
         compute is a boolean of whether to predict or return 0
             exists to clean up stuff in compute_prediction
         """
-        prediction = np.zeros_like(self.Y)
+
+        prediction = []
         if (self.covariates is not None) and compute:
             for i, tissue in enumerate(self.tissue_ids):
-                prediction[i, self.sample_covariate_map[tissue]] = \
-                    self.cov_weights[tissue] @ self.covariates[tissue].values
+                prediction.append(self.cov_weights[tissue] @ self.covariates.loc[tissue].values)
+            prediction = np.array(prediction)
+        else:
+            prediction = np.zeros_like(self.Y)
         return prediction
 
     def compute_prediction(self, k=None, use_covariates=True):
@@ -238,10 +249,16 @@ class IndependentFactorSER:
         return ERSS
 
     def _update_covariate_weights_tissue(self, residual, tissue):
-        weights = np.zeros_like(self.cov_weights[tissue])
-        Y = np.squeeze(residual[self.tissue_ids == tissue, self.sample_covariate_map[tissue]])
-        X = self.covariates[tissue].values
-        self.cov_weights[tissue] = np.linalg.pinv(X.T) @ Y
+        """
+        update covariates
+        nans are masked with 0s-- same as filtering down to relevant
+        samples
+        """
+        Y = np.squeeze(residual[self.tissue_ids == tissue])
+        Y[np.isnan(Y)] = 0
+        pinvX = self.precompute['cov_pinv'][tissue]
+        self.cov_weights[tissue] = pinvX @ Y
+
 
     def _update_pi_component(self, k, residual=None):
         """
