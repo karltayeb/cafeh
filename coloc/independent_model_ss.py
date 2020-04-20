@@ -27,7 +27,10 @@ class IndependentFactorSER:
         # set data
         self.X = X
         self.Y = Y
-        self.covariates = covariates
+        if covariates is not None:
+            self.covariates = covariates.fillna(0)
+        else:
+            self.covariates = None
 
         # set priors
         T, M = Y.shape
