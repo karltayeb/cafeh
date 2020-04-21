@@ -40,6 +40,13 @@ def make_gtex_genotype_data_dict(expression_path, genotype_path):
     return data
 
 
+def rehydrate_model(model):
+    model.weight_means = np.zeros((model.dims['T'],model.dims['K'],model.dims['N']))
+    model.weight_vars = np.ones((model.dims['T'],model.dims['K'],model.dims['N']))
+
+    model.weight_means[:, :, model.records['snp_subset']] = model.records['mini_wm']
+    model.weight_vars[:, :, model.records['snp_subset']] = model.records['mini_wv']
+
 def load_model(model_path, load_data=False):
     gene = model_path.split('/')[-2]
     base_path = '/'.join(model_path.split('/')[:-1])
