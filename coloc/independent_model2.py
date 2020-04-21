@@ -60,8 +60,8 @@ class IndependentFactorSER:
             self.cov_weights = None
 
         # hyper-parameters
-        self.a = 1e-10
-        self.b = 1e-10
+        self.a = 1e-10 * np.ones((T, K))
+        self.b = 1e-10 * np.ones((T, K))
 
         self.weight_precision_a = np.ones((T, K))
         self.weight_precision_b = np.ones((T, K))
@@ -315,8 +315,8 @@ class IndependentFactorSER:
         ARD update for weights
         """
         second_moment = (self.weight_vars[:, k] + self.weight_means[:, k]**2) @ self.pi[k]
-        alpha = self.a + 0.5
-        beta = self.b + second_moment / 2
+        alpha = self.a[:, k] + 0.5
+        beta = self.b[:, k] + second_moment / 2
         self.weight_precision_a[:, k] = alpha
         self.weight_precision_b[:, k] = beta
 
@@ -378,28 +378,6 @@ class IndependentFactorSER:
             residual = self.compute_residual(use_covariates=False)
             for tissue in self.tissue_ids:
                 self._update_covariate_weights_tissue(residual, tissue)
-
-    def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_pi=True, update_variance=True, ARD_weights=False, update_covariate_weights=True):
-        """
-        loop through updates until convergence
-        """
-        init_time = time.time()
-        if components is None:
-            components = np.arange(self.dims['K'])
-
-        for i in range(max_iter):
-            # update covariate weights
-            if (self.covariates is not None) and update_covariate_weights:
-                self.update_covariate_weights()
-
-            # update component parameters
-            for l in components:
-                if ARD_weights:
-                    self.update_ARD_weights(l)
-                if update_weights:
-                    self._update_weight_component(l)
-                if update_pi:
-                    self._update_pi_component(l)
 
             # update variance parameters
             if update_variance:
