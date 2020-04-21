@@ -66,7 +66,6 @@ def load_model(model_path, load_data=False):
         model.__dict__.update(data)
     return model
 
-
 def compute_records(model):
     """
     save the model with data a weight parameters removed
@@ -191,14 +190,13 @@ def make_variant_report(model, gene):
     PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
     purity = model.get_credible_sets(0.99)[1]
     active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])
-
     if active.sum() == 0:
         active[0] = True
 
     pi = pd.DataFrame(model.pi.T, index=model.snp_ids)
     cset_alpha = pd.concat(
         [pi.iloc[:, k].sort_values(ascending=False).cumsum() - pi.iloc[:, k]
-         for k in np.arange(model.dims['K']) if purity[k] > 0.5],
+         for k in np.arange(model.dims['K']) if active[k]],
         sort=False, axis=1
     )
 
