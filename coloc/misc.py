@@ -60,6 +60,54 @@ def load_model(model_path, load_data=False):
     return model
 
 
+def compute_records(model):
+    """
+    save the model with data a weight parameters removed
+    add 'mini_weight_measn' and 'mini_weight_vars' to model
+    the model can be reconstituted in a small number of iterations
+    """
+    PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
+    mask = (PIP > 0.01)
+    wv = model.weight_vars[:, :, mask]
+    wm = model.weight_means[:, :, mask]
+
+    credible_sets, purity = model.get_credible_sets(0.99)
+    active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])
+    records = {
+        'active': active,
+        'purity': purity,
+        'credible_sets': credible_sets,
+        'EXz': model.pi @ model.X,
+        'mini_wm': wm,
+        'mini_wv': wv,
+        'snp_subset': mask
+    }
+    model.records = records
+
+
+def strip_and_dump(model, path, save_data=False):
+    """
+    save the model with data a weight parameters removed
+    add 'mini_weight_measn' and 'mini_weight_vars' to model
+    the model can be reconstituted in a small number of iterations
+    """
+    compute_records(model)
+
+    # purge precompute
+    for key in model.precompute:
+        model.precompute[key] = {}
+
+
+    model.__dict__.pop('weight_means', None)
+    model.__dict__.pop('weight_vars', None)
+
+    if not save_data:
+        model.__dict__.pop('X', None)
+        model.__dict__.pop('Y', None)
+        model.__dict__.pop('covariates', None)
+    pickle.dump(model, open(path, 'wb'))
+
+
 def repair_model(model_path):
     gene = model_path.split('/')[-2]
     base_path = '/'.join(model_path.split('/')[:-1])
@@ -69,27 +117,8 @@ def repair_model(model_path):
     X = make_gtex_genotype_data_dict(expression_path, genotype_path)['X']
 
     model = pickle.load(open(model_path, 'rb'))
-    PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
-    mask = (PIP > 0.01)
-    credible_sets, purity = model.record_credible_sets
-    active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])
-    records = {
-        'active': active,
-        'purity': purity,
-        'credible_sets': credible_sets,
-        'EXz': model.pi @ X,
-        'mini_wm': model.mini_weight_means,
-        'mini_wv': model.mini_weight_vars,
-        'snp_subset': mask
-    }
-    model.records = records
-    model.__dict__.pop('precompute', None)
-    model.__dict__.pop('weight_vars', None)
-    model.__dict__.pop('weight_means', None)
-    model.__dict__.pop('X', None)
-    model.__dict__.pop('Y', None)
-    model.__dict__.pop('covariates', None)
-    pickle.dump(model, open(model_path, 'wb'))
+    compute_records(model)
+    strip_and_dump(model, model_path)
 
 
 def compute_pip(model):
@@ -121,38 +150,6 @@ def plot_components(model, figsize=(15,5)):
     plt.legend()
 
 
-def strip_and_dump(model, path):
-    """
-    save the model with data a weight parameters removed
-    add 'mini_weight_measn' and 'mini_weight_vars' to model
-    the model can be reconstituted in a small number of iterations
-    """
-    PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
-    mask = (PIP > 0.01)
-    wv = model.weight_vars[:, :, mask]
-    wm = model.weight_means[:, :, mask]
-
-    credible_sets, purity = model.get_credible_sets(0.99)
-    active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])
-    records = {
-        'active': active,
-        'purity': purity,
-        'credible_sets': credible_sets,
-        'EXz': model.pi @ model.X,
-        'mini_wm': wm,
-        'mini_wv': wv,
-        'snp_subset': mask
-    }
-    model.records = records
-
-    model.__dict__.pop('precompute', None)
-    model.__dict__.pop('weight_vars', None)
-    model.__dict__.pop('weight_means', None)
-    model.__dict__.pop('X', None)
-    model.__dict__.pop('Y', None)
-    model.__dict__.pop('covariates', None)
-    pickle.dump(model, open(path, 'wb'))
-
 def component_scores(model):
     purity = model.get_credible_sets(0.99)[1]
     active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])
@@ -172,6 +169,19 @@ def component_scores(model):
             index = model.tissue_ids
         )
     return weights
+
+def kl_components(m1, m2, purity_threshold=0.0):
+    """
+    pairwise kl of components for 2 models
+    """
+    a1 = m1.records['active']
+    a2 = m2.records['active']
+    kls = np.array([[
+        categorical_kl(m1.pi[k1], m2.pi[k2])
+        + categorical_kl(m2.pi[k2], m1.pi[k1])
+        for k1 in range(20) if a1[k1]]
+        for k2 in range(20) if a2[k2]])
+    return kls
 
 def make_variant_report(model, gene):
     PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
