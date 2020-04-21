@@ -103,11 +103,8 @@ def strip_and_dump(model, path, save_data=False):
     # purge precompute
     for key in model.precompute:
         model.precompute[key] = {}
-
-
     model.__dict__.pop('weight_means', None)
     model.__dict__.pop('weight_vars', None)
-
     if not save_data:
         model.__dict__.pop('X', None)
         model.__dict__.pop('Y', None)
