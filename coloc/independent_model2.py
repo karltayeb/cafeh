@@ -76,11 +76,6 @@ class IndependentFactorSER:
         self.tolerance = tolerance
         self.run_time = 0
 
-
-        masks = {t: ~np.isnan(self.Y[t]) for t in range(T)}
-        diags = {t: np.einsum(
-            'ij, ij->i', self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)}
-
         if covariates is not None:
             cov_pinv = {t: np.linalg.pinv(self.covariates.loc[t].values.T) for t in self.tissue_ids}
         else:
@@ -90,11 +85,13 @@ class IndependentFactorSER:
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
-            'diags': diags,
-            'masks': masks,
+            'diags': {},
+            'masks': {},
             'cov_pinv': cov_pinv,
             'covariate_prediction': {}
         }
+
+        self.records = {}
 
     @property
     def expected_tissue_precision(self):
@@ -154,6 +151,10 @@ class IndependentFactorSER:
         """
         nan mask to deal with missing values
         """
+        if tissue not in self.precompute['masks']:
+            self.precompute['masks'][tissue] = \
+                ~np.isnan(self.Y[tissue])
+
         return self.precompute['masks'][tissue]
 
     def _get_diag(self, tissue):
@@ -161,6 +162,11 @@ class IndependentFactorSER:
         get diag(X^T X) for a given tissue
         differs for tissues because of missingness in Y
         """
+        if tissue not in self.precompute['masks']:
+            mask = self._get_mask(tissue)
+            self.precompute['diags'][tissue] = \
+                np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
+
         return self.precompute['diags'][tissue]
 
     def compute_first_moment(self, component):
@@ -174,7 +180,6 @@ class IndependentFactorSER:
             weight = self.weight_means[:, component]
             moment = (pi * weight) @ self.X
             self.precompute['first_moments'][component] = moment
-
         return self.precompute['first_moments'][component]
 
     def compute_covariate_prediction(self, compute=True):
