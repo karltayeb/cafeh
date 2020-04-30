@@ -162,7 +162,7 @@ class IndependentFactorSER:
         get diag(X^T X) for a given tissue
         differs for tissues because of missingness in Y
         """
-        if tissue not in self.precompute['masks']:
+        if tissue not in self.precompute['diags']:
             mask = self._get_mask(tissue)
             self.precompute['diags'][tissue] = \
                 np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
