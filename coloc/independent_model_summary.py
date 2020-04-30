@@ -11,7 +11,7 @@ class IndependentFactorSER:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, get_expected_weights, check_convergence
 
-    def __init__(self, LD, YX, yy, n_samples, K, U=None, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
+    def __init__(self, LD, YX, yy, xx, n_samples, K, U=None, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
         """
         Y [T x M] expresion for tissue, individual
         X [N x M] genotype for snp, individual
@@ -66,7 +66,10 @@ class IndependentFactorSER:
         self.tolerance = tolerance
         self.run_time = 0
 
-        diags = {t: np.ones(N) * self.n_samples[t] for t in range(T)}
+        if np.ndim(xx) == 1:
+            diags = {t: xx for t in range(T)}
+        else:
+            diags = {t: xx[t] for t in range(T)}
 
         self.precompute = {
             'Hw': {},
@@ -120,7 +123,10 @@ class IndependentFactorSER:
         expected_effects = self.expected_effects
         if k is not None:
             expected_effects -= self.weight_means[:, k] * self.pi[k][None]
-        rX = self.YX - ((expected_effects * self.n_samples[:, None]) @ self.U) @ self.U.T
+
+        diag = np.stack([self._get_diag(t) for t in range(self.dims['T'])])
+        tU = (np.sqrt(diag[:, :, None]) * self.U[None])
+        rX = self.YX - np.stack([expected_effects[t] @ tU[t] @ tU[t].T for t in range(self.dims['T'])])
         return rX
 
     @property
