@@ -3,7 +3,7 @@ import pandas as pd
 import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+from .kls import categorical_kl
 
 def make_gtex_genotype_data_dict(expression_path, genotype_path):
     # load expression
