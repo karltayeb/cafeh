@@ -182,8 +182,8 @@ def kl_components(m1, m2, purity_threshold=0.0):
     kls = np.array([[
         categorical_kl(m1.pi[k1], m2.pi[k2])
         + categorical_kl(m2.pi[k2], m1.pi[k1])
-        for k1 in range(20) if a1[k1]]
-        for k2 in range(20) if a2[k2]])
+        for k1 in range(m1.dims['K']) if a1[k1]]
+        for k2 in range(m2.dims['K']) if a2[k2]])
     return kls
 
 def make_variant_report(model, gene):
