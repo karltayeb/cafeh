@@ -163,7 +163,7 @@ class IndependentFactorSER:
         for t in range(self.dims['T']):
             diag = self._get_diag(t)
 
-            pt1 = E_w2[t].sum() * self.n_samples[t]
+            pt1 = (E_w2[t] * diag).sum()
 
             # mu_pi @ self.XX @ mu_pi
             mu_pi = self.weight_means[t] * self.pi
