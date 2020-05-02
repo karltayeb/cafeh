@@ -185,10 +185,10 @@ class CAFEH:
             mpSpm = mupi @ self.LD @ mupi.T
 
             ERSS[t] = self.compute_tissue_constant(t)
-            ERSS[t] += -2 * np.inner(self.Z[t] * self.S[t], mupi[t].sum(0))
+            import pdb; pdb.set_trace()
+            ERSS[t] += -2 * np.inner(self.Z[t] * self.S[t], mupi.sum(0))
             ERSS[t] += m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
         return ERSS
-
 
     def _update_pi_component(self, k, residual=None):
         """
