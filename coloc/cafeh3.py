@@ -58,6 +58,7 @@ class CAFEH:
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
+            'tissue_constants': {},
             'diags': {},
             'masks': {}
         }
