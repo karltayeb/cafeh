@@ -141,7 +141,7 @@ class CAFEH:
         if component not in self.precompute['first_moments']:
             pi = self.pi[component]
             weight = self.weight_means[:, component]
-            moment = (pi * weight / self.S) @ self.LD
+            moment = ((pi * weight) @ self.LD) / self.S
             self.precompute['first_moments'][component] = moment
         return self.precompute['first_moments'][component]
 
@@ -153,7 +153,8 @@ class CAFEH:
         # if its not computed, compute now
         if tissue not in self.precompute['tissue_constants']:
             ZS = self.Z[tissue] * self.S[tissue]
-            c = ZS  @ np.linalg.solve(self.LD, ZS)
+            c = ZS  @ np.linalg.pinv(self.LD) @ ZS
+            #np.linalg.solve(self.LD, ZS)
             self.precompute['tissue_constants'][tissue] = c
         return self.precompute['tissue_constants'][tissue]
 
@@ -381,7 +382,7 @@ class CAFEH:
         ld matrix for subset of snps
         snps: integer index into snp_ids
         """
-        return self.LD
+        return self.LD[snps][:, snps]
 
     def save(self, output_dir, model_name, save_data=False):
         """
