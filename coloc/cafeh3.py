@@ -12,7 +12,7 @@ class CAFEH:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, get_expected_weights, check_convergence
 
-    def __init__(self, LD, Z, S, K, snp_ids=None, tissue_ids=None, tolerance=1e-5):
+    def __init__(self, LD, Z, S, sample_size, K, snp_ids=None, tissue_ids=None, tolerance=1e-5):
         """
         blah
         """
@@ -21,7 +21,7 @@ class CAFEH:
         self.LD = LD  # N x N
         self.Z = Z  # T x N z scores
         self.S = S  # T x N standard errors
-
+        self.sample_size = sample_size
         # set priors
         T, N = Z.shape
         self.dims = {'N': N, 'T': T, 'K': K}
@@ -58,7 +58,6 @@ class CAFEH:
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
-            'tissue_constants': {},
             'diags': {},
             'masks': {}
         }
@@ -149,13 +148,14 @@ class CAFEH:
         """
         compute E[LDSDzw] for a component
         """
-
-        # if its not computed, compute now
-        if tissue not in self.precompute['tissue_constants']:
-            ZS = self.Z[tissue] * self.S[tissue]
-            c = ZS  @ np.linalg.pinv(self.LD) @ ZS
-            #np.linalg.solve(self.LD, ZS)
-            self.precompute['tissue_constants'][tissue] = c
+        if 'tissue_constants' not in self.precompute:
+            tc = []
+            LDinv = np.linalg.pinv(self.LD)
+            for t in range(self.dims['T']):
+                ZS = self.Z[tissue] * self.S[tissue]
+                c = ZS  @ LDinv @ ZS
+                tc.append(c)
+            self.precompute['tissue_constants'] = np.array(tc)
         return self.precompute['tissue_constants'][tissue]
 
     def compute_prediction(self, k=None):
@@ -298,7 +298,7 @@ class CAFEH:
             residual = self.compute_residual()
         ERSS = self._compute_ERSS()
 
-        self.tissue_precision_a = self.c + self.dims['N'] / 2
+        self.tissue_precision_a = self.c + self.sample_size / 2
         self.tissue_precision_b = self.d + ERSS / 2
 
     def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_pi=True, update_variance=True, ARD_weights=False):
