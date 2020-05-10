@@ -27,6 +27,7 @@ class IndependentFactorSER:
         # set data
         self.X = X
         self.Y = Y
+
         if covariates is not None:
             self.covariates = covariates.fillna(0)
         else:
@@ -121,7 +122,8 @@ class IndependentFactorSER:
         """
         computed expected effect size E[zw] [T, N]
         """
-        return np.einsum('ijk,jk->ik', self.weight_means, self.pi)
+        return np.einsum('ijk,jk->ik',
+            self.weight_means * self.active[:, :, None], self.pi)
 
     @property
     def credible_sets(self):
@@ -159,26 +161,23 @@ class IndependentFactorSER:
         if component not in self.precompute['first_moments']:
             pi = self.pi[component]
             weight = self.weight_means[:, component]
-            moment = ((pi * weight) @ self.X) * self.active[:, component][:, None]
+            active = self.active[:, component][:, None]
+            moment = ((pi * weight) @ self.X) * active
             self.precompute['first_moments'][component] = moment
-
         return self.precompute['first_moments'][component]
 
     def compute_Hw(self, component):
         """
-        compute entropy of q(w)
+        compute entropy of q(w|z, s=1)
         """
         if component not in self.precompute['Hw']:
             v1 = self.weight_vars[:, component]
-            v0 = (1 / self.expected_weight_precision[:, component])[:, None]
-            active = self.active[:, component][:, None]
-            self.precompute['Hw'][component] = \
-                normal_entropy(v1) * active + normal_entropy(v0) * (1 - active)
+            self.precompute['Hw'][component] = normal_entropy(v1)
         return self.precompute['Hw'][component]
 
     def compute_Ew2(self, component):
         """
-        compute second moment of q(w)
+        compute second moment of q(w |z, s=1)
         """
         if component not in self.precompute['Ew2']:
             m1 = self.weight_means[:, component]
@@ -186,7 +185,7 @@ class IndependentFactorSER:
             self.precompute['Ew2'][component] = (m1**2 + v1)
         return self.precompute['Ew2'][component]
 
-    def _compute_covariate_prediction(self, compute=True):
+    def compute_covariate_prediction(self, compute=True):
         """
         predict from covariates
         compute is a boolean of whether to predict or return 0
@@ -206,7 +205,7 @@ class IndependentFactorSER:
         """
         compute expected prediction
         """
-        prediction = self._compute_covariate_prediction(use_covariates)
+        prediction = self.compute_covariate_prediction(use_covariates)
 
         prediction = np.sum([
             self.compute_first_moment(l) for l in range(self.dims['K']) if l != k
@@ -220,7 +219,31 @@ class IndependentFactorSER:
         prediction = self.compute_prediction(k, use_covariates)
         return self.Y - prediction
 
-    def _compute_ERSS(self, k=None):
+    def _compute_ERSS(self):
+        """
+        compute ERSS using XY and XX
+        """
+        covariate_residual = self.Y - self.compute_covariate_prediction()
+
+        ERSS = np.zeros(self.dims['T'])
+        for t in range(self.dims['T']):
+            mask = self._get_mask(t)
+            diag = self._get_diag(t)
+
+            active = self.active[t][:, None]  # Kx1
+            Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
+            m2pid = np.sum(active * Ew2 * diag * self.pi)
+            mupi = (self.weight_means[t] * active) * self.pi
+            mpX = (mupi) @ self.X[:, mask]
+
+            y = covariate_residual[t, mask]
+            ERSS[t] = np.inner(y, y)
+            ERSS[t] += -2 * np.inner(y, mpX.sum(0))
+            ERSS[t] += m2pid.sum() + np.sum(mpX @ mpX.T) - np.sum(mpX**2)
+        return ERSS
+
+
+    def _compute_ERSS_old(self, k=None):
         """
         compute ERSS using XY and XX
         """
@@ -231,23 +254,22 @@ class IndependentFactorSER:
             self.compute_first_moment(l)
             for l in range(self.dims['K']) if l != k
         ])
+
+        covariate_residual = self.Y - self.compute_covariate_prediction()
         for t in range(self.dims['T']):
             mask = self._get_mask(t)
             diag = self._get_diag(t)
-
-            pt1 = np.sum([
-                self.compute_Ew2(k)[t] 
-                * self.active[t, k] * (self.pi[k] * diag)
-                for k in range(self.dims['K'])
-            ])
+            Ew2 = (self.weight_means[t] ** 2 + self.weight_vars[t])
+            active = self.active[t][:, None]
+            pt1 = np.sum(Ew2 * self.pi * diag * active)
             if k is not None:
-                pt1 -= np.sum(self.compute_Ew2(k)[t]
-                              * self.active[t, k] * self.pi[k] * diag)
+                pt1 -= np.sum(self.compute_Ew2(k)[t] * self.pi[k] * diag)
 
             pt2 = np.inner(prediction[t, mask], prediction[t, mask])
             pt3 = np.einsum('ij,ij->i', first_moments[:, t, mask], first_moments[:, t, mask]).sum()
-            ERSS[t] = np.inner(self.Y[t, mask], self.Y[t, mask])
-            ERSS[t] += -2 * np.inner(self.Y[t, mask], prediction[t, mask])
+
+            ERSS[t] = np.inner(covariate_residual[t, mask], covariate_residual[t, mask])
+            ERSS[t] += -2 * np.inner(covariate_residual[t, mask], prediction[t, mask])
             ERSS[t] += pt1 + np.sum(pt2) - pt3
         return ERSS
 
@@ -277,23 +299,25 @@ class IndependentFactorSER:
 
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
-        E_alpha = self.expected_weight_precision[:, k]
-        E_w2 = self.compute_Ew2(k)
+        E_alpha = self.expected_weight_precision[:, k][:, None]
+        E_tau = self.expected_tissue_precision[:, None]
+        Ew2 = self.compute_Ew2(k)
+        active = self.active[:, k][:, None]
 
         # E[ln p(y | w, z, alpha , tau)]
         tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
-            + diag * E_w2
-        tmp1 *= -0.5 * (self.expected_tissue_precision * self.active[:, k])[:, None]
-
+            + diag * Ew2
+        tmp1 = -0.5 * E_tau * tmp1 * active
 
         # E[ln p(w | alpha)] + H(q(w))
-        lik = (
-            -0.5 * np.log(2 * np.pi)
-            + 0.5 * E_ln_alpha[:, None]
-            - 0.5 * E_alpha[:, None] * E_w2 * self.active[:, k][:, None])  # [T, N]
+        Ew2 = Ew2 * active + (1 / E_alpha) * (1 - active)
         entropy = self.compute_Hw(k)
+        entropy = entropy * active + normal_entropy(1 / E_alpha) * (1 - active)
+        
+        lik = (
+            - 0.5 * E_alpha * Ew2
+        )  # [T, N]        
         pi_k = (tmp1 + lik + entropy)
-
         pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
         pi_k = np.exp(pi_k - pi_k.max())
@@ -317,12 +341,16 @@ class IndependentFactorSER:
         for k in components:
             self._update_pi_component(k)
 
-
     def update_ARD_weights(self, k):
         """
         ARD update for weights
         """
-        second_moment = self.compute_Ew2(k) @ self.pi[k] # * self.active[:, k]
+        active = self.active[:, k]
+        E_alpha = self.expected_weight_precision[:, k]
+        Ew2 = self.compute_Ew2(k)
+        second_moment = Ew2 @ self.pi[k]
+        second_moment = second_moment * active \
+            + (1 / E_alpha) * (1 - active)
         alpha = self.a + 0.5
         beta = self.b + second_moment / 2
         self.weight_precision_a[:, k] = alpha
@@ -343,7 +371,8 @@ class IndependentFactorSER:
         precision = diag * self.expected_tissue_precision[:, None] \
             + self.expected_weight_precision[:, k][:, None]
         variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
+        mean = (variance * self.expected_tissue_precision[:, None]) \
+            * (r_k @ self.X.T)
 
         # update params
         self.weight_vars[:, k] = variance
@@ -364,7 +393,6 @@ class IndependentFactorSER:
         for k in components:
             self._update_weight_component(k, ARD)
 
-
     def _update_active_component(self, k):
         """
         update active
@@ -372,13 +400,13 @@ class IndependentFactorSER:
         diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])  # T x N
         r_k = self.compute_residual(k)
         r_k[np.isnan(self.Y)] = 0
-
         p_k = self.compute_first_moment(k) / self.active[:, k][:, None]
 
-        tmp1 = -2 * np.einsum('ij,ij->i', r_k, p_k) + (self.compute_Ew2(k) * diag) @ self.pi[k]
+        tmp1 = -2 * np.einsum('ij,ij->i', r_k, p_k) \
+            + (self.compute_Ew2(k) * diag) @ self.pi[k]
         tmp1 = -0.5 * self.expected_tissue_precision * tmp1
-
-        tmp2 = -0.5 * self.expected_weight_precision[:, k] * (self.compute_Ew2(k) @ self.pi[k]) \
+        tmp2 = -0.5 * self.expected_weight_precision[:, k] \
+            * (self.compute_Ew2(k) @ self.pi[k]) \
             + normal_entropy(self.weight_vars[:, k]) @ self.pi[k]
 
         a = tmp1 + tmp2
@@ -458,7 +486,6 @@ class IndependentFactorSER:
         if verbose:
             print('cumulative run time: {}'.format(self.run_time))
 
-
     def compute_elbo(self, residual=None):
         """
         copute evidence lower bound
@@ -481,16 +508,17 @@ class IndependentFactorSER:
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
         Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])])
-        E_w2 = np.einsum('jik,jk->ij', Ew2, self.pi)
+        Ew2 = np.einsum('jik,jk->ij', Ew2, self.pi)
+        Ew2 = Ew2 * self.active + (1 - self.active) / E_alpha
 
         Hw = np.array([self.compute_Hw(k) for k in range(self.dims['K'])])
         entropy = np.einsum('jik,jk->ij', Hw, self.pi)
-
+        entropy = entropy * self.active + \
+            normal_entropy(1 / E_alpha) * (1 - self.active)
         lik = (
             - 0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha
-            - 0.5 * E_alpha * E_w2 * self.active
-            - 0.5 * (1 - self.active)
+            - 0.5 * E_alpha * Ew2
         )
 
         KL -= lik.sum() + entropy.sum()
