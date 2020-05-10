@@ -206,8 +206,7 @@ class IndependentFactorSER:
         compute expected prediction
         """
         prediction = self.compute_covariate_prediction(use_covariates)
-
-        prediction = np.sum([
+        prediction += np.sum([
             self.compute_first_moment(l) for l in range(self.dims['K']) if l != k
         ], axis=0)
         return prediction
@@ -255,7 +254,8 @@ class IndependentFactorSER:
             for l in range(self.dims['K']) if l != k
         ])
 
-        covariate_residual = self.Y - self.compute_covariate_prediction()
+        covariate_residual = self.Y \
+            - self.compute_covariate_prediction()
         for t in range(self.dims['T']):
             mask = self._get_mask(t)
             diag = self._get_diag(t)
@@ -283,7 +283,6 @@ class IndependentFactorSER:
         Y[np.isnan(Y)] = 0
         pinvX = self.precompute['cov_pinv'][tissue]
         self.cov_weights[tissue] = pinvX @ Y
-
 
     def _update_pi_component(self, k, residual=None):
         """
