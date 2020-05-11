@@ -150,22 +150,26 @@ class CAFEH:
         """
 
         # if its not computed, compute now
+        """
         if component not in self.precompute['first_moments']:
             pi = self.pi[component]
             weight = self.weight_means[:, component]
             active = self.active[:, component]
             moment = []
-            """
-            for t in range(self.dims['T']):
-                S = self.S[t]
-                mu = pi * weight[t] * active[t]
-                mask = mu > 1e-10
-                moment.append(((mu/S) @ self.LD) * S)
-            self.precompute['first_moments'][component] = np.array(moment)
-            """
             mu = pi[None] * weight * active[:, None]
             self.precompute['first_moments'][component] = \
                 (mu / self.S) @ self.LD * self.S
+        return self.precompute['first_moments'][component]
+        """
+        if component not in self.precompute['first_moments']:
+            Q=100
+            pi = self.pi[component]
+            active = self.active[:, component][:, None]
+            sample = np.random.choice(a=pi.size, size=Q, p=pi)
+            weight = self.weight_means[:, component, sample]
+            mu = weight * active / self.S[:, sample]
+            m = (mu @ self.LD[sample] * self.S) / Q
+            self.precompute['first_moments'][component] = m
         return self.precompute['first_moments'][component]
 
     def compute_tissue_constant(self, tissue):
