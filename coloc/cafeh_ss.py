@@ -155,12 +155,16 @@ class CAFEH:
             weight = self.weight_means[:, component]
             active = self.active[:, component]
             moment = []
+            """
             for t in range(self.dims['T']):
                 S = self.S[t]
                 mu = pi * weight[t] * active[t]
                 mask = mu > 1e-10
                 moment.append(((mu/S) @ self.LD) * S)
             self.precompute['first_moments'][component] = np.array(moment)
+            """
+            mu = pi[None] * weight * active[:, None]
+            moment = (mu / self.S) @ self.LD * self.S
         return self.precompute['first_moments'][component]
 
     def compute_tissue_constant(self, tissue):
