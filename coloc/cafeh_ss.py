@@ -156,8 +156,9 @@ class CAFEH:
             active = self.active[:, component]
             moment = []
             for t in range(self.dims['T']):
-                SRSinv = self.S[t][:, None] * self.LD / self.S[t]
-                moment.append(((pi * weight[t]) @ SRSinv.T) * active[t])
+                S = self.S[t]
+                mu = pi * weight[t] * active[t]
+                moment.append(((mu/S) @ self.LD) * S)
             self.precompute['first_moments'][component] = np.array(moment)
         return self.precompute['first_moments'][component]
 
