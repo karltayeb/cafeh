@@ -159,7 +159,7 @@ class CAFEH:
                 S = self.S[t]
                 mu = pi * weight[t] * active[t]
                 mask = mu > 1e-10
-                moment.append(((mu/S)[mask] @ self.LD[mask]) * S)
+                moment.append(((mu/S) @ self.LD) * S)
             self.precompute['first_moments'][component] = np.array(moment)
         return self.precompute['first_moments'][component]
 
