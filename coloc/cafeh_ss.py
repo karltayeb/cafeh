@@ -164,7 +164,7 @@ class CAFEH:
             self.precompute['first_moments'][component] = np.array(moment)
             """
             mu = pi[None] * weight * active[:, None]
-            moment = (mu / self.S) @ self.LD * self.S
+            self.precompute['first_moments'] = (mu / self.S) @ self.LD * self.S
         return self.precompute['first_moments'][component]
 
     def compute_tissue_constant(self, tissue):
