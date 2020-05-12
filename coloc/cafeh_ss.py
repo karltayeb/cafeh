@@ -66,7 +66,6 @@ class CAFEH:
             'diags': {},
             'masks': {}
         }
-
         self.records = {}
 
     @property
@@ -150,27 +149,37 @@ class CAFEH:
         """
 
         # if its not computed, compute now
-        """
+
         if component not in self.precompute['first_moments']:
-            pi = self.pi[component]
-            weight = self.weight_means[:, component]
-            active = self.active[:, component]
-            moment = []
-            mu = pi[None] * weight * active[:, None]
+            #self.precompute['first_moments'][component] = \
+            #    self._compute_first_moment(component)
             self.precompute['first_moments'][component] = \
-                (mu / self.S) @ self.LD * self.S
+                self._compute_first_moment_randomized(component)
         return self.precompute['first_moments'][component]
+
+    def _compute_first_moment(self, component, Q):
         """
-        if component not in self.precompute['first_moments']:
-            Q=100
-            pi = self.pi[component]
-            active = self.active[:, component][:, None]
-            sample = np.random.choice(a=pi.size, size=Q, p=pi)
-            weight = self.weight_means[:, component, sample]
-            mu = weight * active / self.S[:, sample]
-            m = (mu @ self.LD[sample] * self.S) / Q
-            self.precompute['first_moments'][component] = m
-        return self.precompute['first_moments'][component]
+        compute first moment
+        """
+        pi = self.pi[component]
+        weight = self.weight_means[:, component]
+        active = self.active[:, component]
+        moment = []
+        mu = pi[None] * weight * active[:, None]
+        m = (mu / self.S) @ self.LD * self.S
+        return m
+
+    def _compute_first_moment_randomized(self, component, Q=100):
+        """
+        compute estimate of first moment, sampling from q(z)
+        """
+        pi = self.pi[component]
+        active = self.active[:, component][:, None]
+        sample = np.random.choice(a=pi.size, size=Q, p=pi)
+        weight = self.weight_means[:, component, sample]
+        mu = weight * active / self.S[:, sample]
+        m = (mu @ self.LD[sample] * self.S) / Q
+        return m
 
     def compute_tissue_constant(self, tissue):
         """
