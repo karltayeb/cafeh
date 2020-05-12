@@ -242,7 +242,7 @@ class IndependentFactorSER:
         return ERSS
 
 
-    def _compute_ERSS(self, k=None):
+    def _compute_ERSS_old(self, k=None):
         """
         compute ERSS using XY and XX
         """
