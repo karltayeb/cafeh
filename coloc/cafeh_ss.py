@@ -198,20 +198,22 @@ class CAFEH:
         """
         compute ERSS using XY and XX
         """
-        ERSS = np.zeros(self.dims['T'])
-        for t in range(self.dims['T']):
-            diag = (self.S**-2)[t]  # N
-            active = self.active[t][:, None]  # Kx1
-            mupi = (self.weight_means[t] * active) * self.pi
+        ERSS = np.array([self._compute_ERSS_tissue(t)
+            for t in range(self.dims['T'])])
+        return ERSS
 
-            ERSS[t] = self.compute_tissue_constant(t)
-            ERSS[t] += -2 * np.inner(self.B[t] * diag, mupi.sum(0))
-            ERSS[t] += self._compute_quad_randomized(t)
-            
-            #Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
-            #m2pid = np.sum(active * Ew2 * diag * self.pi)
-            #mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
-            #ERSS[t] += m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
+    def _compute_ERSS_tissue(self, t):
+        diag = (self.S**-2)[t]  # N
+        active = self.active[t][:, None]  # Kx1
+        mupi = (self.weight_means[t] * active) * self.pi
+
+        ERSS = self.compute_tissue_constant(t)
+        ERSS += -2 * np.inner(self.B[t] * diag, mupi.sum(0))
+        ERSS += self._compute_quad_randomized(t)
+        #Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
+        #m2pid = np.sum(active * Ew2 * diag * self.pi)
+        #mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
+        #ERSS[t] += m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
         return ERSS
 
     def _compute_quad_randomized(self, t, Q=100):
