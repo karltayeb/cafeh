@@ -238,11 +238,11 @@ class IndependentFactorSER:
             y = covariate_residual[t, mask]
             ERSS[t] = np.inner(y, y)
             ERSS[t] += -2 * np.inner(y, mpX.sum(0))
-            ERSS[t] += m2pid.sum() + np.sum(mpX @ mpX.T) - np.sum(mpX**2)
+            ERSS[t] += m2pid.sum() + np.sum(mpX.sum(0)**2) - np.sum(mpX**2)
         return ERSS
 
 
-    def _compute_ERSS_old(self, k=None):
+    def _compute_ERSS(self, k=None):
         """
         compute ERSS using XY and XX
         """
