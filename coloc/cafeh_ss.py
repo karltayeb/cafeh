@@ -225,7 +225,6 @@ class CAFEH:
             var_beta = (self.weight_vars[t, np.arange(10), s] * active)
             total.append((beta_s @ self.LD[s][:, s] @ beta_s)
                 + (diag[s] * var_beta).sum())
-            all_tissue_total.append(total)
         return np.mean(total)
 
     def _update_pi_component(self, k, residual=None):
