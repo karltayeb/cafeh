@@ -209,18 +209,22 @@ class CAFEH:
 
             ERSS[t] = self.compute_tissue_constant(t)
             ERSS[t] += -2 * np.inner(self.B[t] * diag, mupi.sum(0))
-            ERSS[t] += m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
+            ERSS[t] += self._compute_quad_randomized(t)
+            #ERSS[t] += m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
         return ERSS
 
     def _compute_quad_randomized(self, t, Q=100):
+        diag = self.S[t]**-2
+        active = self.active[t]
+
         sample = np.array([np.random.choice(
             self.pi[0].size, Q, p=self.pi[k]) for k in range(self.dims['K'])]).T
         total = []
         for s in sample:
-            active = self.active[t]
             beta_s = (active * self.weight_means[t, np.arange(10), s]) / self.S[t, s]
             var_beta = (self.weight_vars[t, np.arange(10), s] * active)
-            total.append((beta_s @ self.LD[s][:,s] @ beta_s) + (diag[t, s]*var_beta).sum())
+            total.append((beta_s @ self.LD[s][:, s] @ beta_s)
+                + (diag[s] * var_beta).sum())
         return np.mean(total)
 
     def _update_pi_component(self, k, residual=None):
