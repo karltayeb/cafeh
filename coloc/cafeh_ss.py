@@ -233,7 +233,7 @@ class CAFEH:
         total = []
         for s in sample:
             beta_s = (active * self.weight_means[t, np.arange(self.dims['K']), s]) / self.S[t, s]
-            var_beta = (self.weight_vars[t, np.arange(10), s] * active)
+            var_beta = (self.weight_vars[t, np.arange(self.dims['K']), s] * active)
             total.append((beta_s @ self.LD[s][:, s] @ beta_s)
                 + (diag[s] * var_beta).sum())
         return np.mean(total)
