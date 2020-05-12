@@ -212,7 +212,7 @@ class CAFEH:
         return ERSS
 
     def _compute_ERSS_tissue(self, t):
-        diag = (self.S**-2)[t]  # N
+        diag = (self.S**-2)[t] * np.diag(self.LD)  # N
         active = self.active[t][:, None]  # Kx1
         mupi = (self.weight_means[t] * active) * self.pi
 
@@ -228,7 +228,7 @@ class CAFEH:
     def _compute_quad_randomized(self, t, Q=100):
         sample = np.array([np.random.choice(
             self.pi[0].size, Q, p=self.pi[k]) for k in range(self.dims['K'])]).T
-        diag = self.S[t]**-2
+        diag = self.S[t]**-2 * np.diag(self.LD)
         active = self.active[t]
         total = []
         for s in sample:
@@ -242,7 +242,7 @@ class CAFEH:
         """
         update pi for a component
         """
-        diag = self.S**-2
+        diag = self.S**-2 * np.diag(self.LD)[None]
         if residual is None:
             r_k = self.compute_residual(k)
         else:
@@ -310,7 +310,7 @@ class CAFEH:
         """
         update weights for a component
         """
-        diag = self.S**-2
+        diag = self.S**-2 * np.diag(self.LD)[None]
         if residual is None:
             r_k = self.compute_residual(k)
         else:
@@ -351,7 +351,7 @@ class CAFEH:
         """
         update active
         """
-        diag = self.S**-2  # T x N
+        diag = self.S**-2 * np.diag(self.LD)[None] # T x N
         r_k = self.compute_residual(k)
         p_k = self.compute_first_moment(k) / self.active[:, k][:, None]
 
