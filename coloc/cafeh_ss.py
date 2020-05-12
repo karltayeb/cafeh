@@ -202,29 +202,30 @@ class CAFEH:
         for t in range(self.dims['T']):
             diag = (self.S**-2)[t]  # N
             active = self.active[t][:, None]  # Kx1
-            Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
-            m2pid = np.sum(active * Ew2 * diag * self.pi)
             mupi = (self.weight_means[t] * active) * self.pi
-            mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
 
             ERSS[t] = self.compute_tissue_constant(t)
             ERSS[t] += -2 * np.inner(self.B[t] * diag, mupi.sum(0))
             ERSS[t] += self._compute_quad_randomized(t)
+            
+            #Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
+            #m2pid = np.sum(active * Ew2 * diag * self.pi)
+            #mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
             #ERSS[t] += m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
         return ERSS
 
     def _compute_quad_randomized(self, t, Q=100):
-        diag = self.S[t]**-2
-        active = self.active[t]
-
         sample = np.array([np.random.choice(
             self.pi[0].size, Q, p=self.pi[k]) for k in range(self.dims['K'])]).T
+        diag = self.S[t]**-2
+        active = self.active[t]
         total = []
         for s in sample:
             beta_s = (active * self.weight_means[t, np.arange(10), s]) / self.S[t, s]
             var_beta = (self.weight_vars[t, np.arange(10), s] * active)
             total.append((beta_s @ self.LD[s][:, s] @ beta_s)
                 + (diag[s] * var_beta).sum())
+            all_tissue_total.append(total)
         return np.mean(total)
 
     def _update_pi_component(self, k, residual=None):
