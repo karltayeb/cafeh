@@ -157,7 +157,7 @@ class CAFEH:
                 self._compute_first_moment_randomized(component)
         return self.precompute['first_moments'][component]
 
-    def _compute_first_moment(self, component, Q):
+    def _compute_first_moment(self, component):
         """
         compute first moment
         """
@@ -219,11 +219,8 @@ class CAFEH:
         ERSS = self.compute_tissue_constant(t)
         ERSS += -2 * np.inner(self.B[t] * diag, mupi.sum(0))
         ERSS += self._compute_quad_randomized(t)
-        #Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
-        #m2pid = np.sum(active * Ew2 * diag * self.pi)
-        #mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
-        #ERSS[t] += m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
         return ERSS
+
 
     def _compute_quad_randomized(self, t, Q=100):
         sample = np.array([np.random.choice(
@@ -235,8 +232,19 @@ class CAFEH:
             beta_s = (active * self.weight_means[t, np.arange(self.dims['K']), s]) / self.S[t, s]
             var_beta = (self.weight_vars[t, np.arange(self.dims['K']), s] * active)
             total.append((beta_s @ self.LD[s][:, s] @ beta_s)
-                + (diag[s] * var_beta).sum())
+                         + (diag[s] * var_beta).sum())
         return np.mean(total)
+
+    def _compute_quad(self, t):
+        diag = (self.S**-2)[t] * np.diag(self.LD)  # N
+        active = self.active[t][:, None]  # Kx1
+        mupi = (self.weight_means[t] * active) * self.pi
+
+        Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
+        m2pid = np.sum(active * Ew2 * diag * self.pi)
+        mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
+        total = m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
+        return total
 
     def _update_pi_component(self, k, residual=None):
         """
@@ -353,8 +361,7 @@ class CAFEH:
         """
         diag = self.S**-2 * np.diag(self.LD)[None] # T x N
         r_k = self.compute_residual(k)
-        p_k = self.compute_first_moment(k) / self.active[:, k][:, None]
-
+        p_k = self.pi[k][None] * self.weight_means[:, k]
         tmp1 = -2 * np.einsum('ij,ij->i', r_k * diag, p_k) \
             + (self.compute_Ew2(k) * diag) @ self.pi[k]
         tmp1 = -0.5 * self.expected_tissue_precision * tmp1
