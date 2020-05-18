@@ -151,10 +151,8 @@ class CAFEH:
         # if its not computed, compute now
 
         if component not in self.precompute['first_moments']:
-            #self.precompute['first_moments'][component] = \
-            #    self._compute_first_moment(component)
             self.precompute['first_moments'][component] = \
-                self._compute_first_moment_randomized(component)
+                self._compute_first_moment(component)
         return self.precompute['first_moments'][component]
 
     def _compute_first_moment(self, component):
