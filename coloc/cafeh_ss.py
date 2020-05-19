@@ -174,8 +174,8 @@ class CAFEH:
         active = self.active[:, component][:, None]
         sample = np.random.choice(a=pi.size, size=Q, p=pi)
         weight = self.weight_means[:, component, sample]
-        mu = weight * active / self.S[:, sample]
-        m = (mu @ self.LD[sample] * self.S) / Q
+        mu = (weight * active) / self.S[:, sample]
+        m = ((mu @ self.LD[sample]) * self.S) / Q
         return m
 
     def compute_tissue_constant(self, tissue):
@@ -218,8 +218,7 @@ class CAFEH:
         ERSS += self._compute_quad_randomized(t)
         return ERSS
 
-
-    def _compute_quad_randomized(self, t, Q=100):
+    def _compute_quad_randomized(self, t, Q=1):
         sample = np.array([np.random.choice(
             self.pi[0].size, Q, p=self.pi[k]) for k in range(self.dims['K'])]).T
         diag = self.S[t]**-2 * np.diag(self.LD)
