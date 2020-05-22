@@ -5,25 +5,67 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 from .kls import categorical_kl
 
-def make_gtex_genotype_data_dict(expression_path, genotype_path):
-    # load expression
-    gene_expression = pd.read_csv(expression_path, sep='\t', index_col=0)
+def need_to_flip(variant_id):
+    _, _, major, minor, _, ref = variant_id.strip().split('_')
+    if minor != ref:
+        return True
+    else:
+        return False
+
+
+flip = lambda x: (x-1)*-1 + 1
+
+
+def load_gtex_genotype(genotype_path, standardize=False):
+    """
+    fetch genotype
+    flip codings that are need to be flipped
+    set snp_ids to be consistent with gtex
+    """
     #load genotype
     genotype = pd.read_csv(genotype_path, sep=' ')
     genotype = genotype.set_index('IID').iloc[:, 5:]
+
+    # recode genotypes
+    coded_snp_ids = np.array([x.strip() for x in genotype.columns])
+    snp_ids = np.array(['_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids])
+    snp_ids = {x: '_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids}
+    genotype.rename(columns=snp_ids, inplace=True)
+
+    flips = np.array([need_to_flip(vid) for vid in coded_snp_ids])
+    genotype.iloc[:, flips] = genotype.iloc[:, flips].applymap(flip) 
+    return genotype
+
+
+def load_gtex_expression(expression_path):
+    """
+    load expression, drop unexpressed individuals
+    """
+    # load expression
+    gene_expression = pd.read_csv(expression_path, sep='\t', index_col=0)
+    # drop individuals that do not have recorded expression
+    gene_expression = gene_expression.loc[:, ~np.all(np.isnan(gene_expression), 0)]
+    return gene_expression
+
+
+def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False):
+    # load expression
+    gene_expression = load_gtex_expression(expression_path)
+    genotype = load_gtex_genotype(genotype_path)
+
     # center, mean immpute
     genotype = (genotype - genotype.mean(0))
     genotype = genotype.fillna(0)
+
     # standardize
-    genotype = genotype / genotype.std(0)
-    # drop individuals that do not have recorded expression
-    gene_expression = gene_expression.loc[:, ~np.all(np.isnan(gene_expression), 0)]
-    # filter down to relevant individuals
-    genotype = genotype.loc[gene_expression.columns]
+    if standardize:
+        genotype = genotype / genotype.std(0)
+
     # filter down to common individuals
     individuals = np.intersect1d(genotype.index.values, gene_expression.columns.values)
     genotype = genotype.loc[individuals]
     gene_expression = gene_expression.loc[:, individuals]
+
     # load covariates
     covariates = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/covariates.csv', sep='\t', index_col=[0, 1])
     covariates = covariates.loc[gene_expression.index]
@@ -40,12 +82,50 @@ def make_gtex_genotype_data_dict(expression_path, genotype_path):
     return data
 
 
+def compute_summary_stats(data):
+    B = {}
+    V = {}
+    S = {}
+    for i, tissue in enumerate(data['tissue_ids']):
+        cov = data['covariates'].loc[tissue]
+        mask = ~np.isnan(cov.iloc[0])
+        cov = cov.values[:, mask]
+        y = data['Y'][i, mask]
+        X = data['X'][:, mask]
+
+        #H = cov.T @ np.linalg.solve(cov @ cov.T, cov)
+        H = (np.linalg.pinv(cov) @ cov)
+        yc = y - y @ H
+        Xc = X - X @ H
+        # prep css data
+        B[tissue] = (Xc @ yc) / np.einsum('ij,ij->i', Xc, Xc)
+        r = yc - B[tissue][:, None]*Xc
+        V[tissue] = np.einsum('ij,ij->i', r, r) / np.einsum('ij,ij->i', Xc, Xc) / (yc.size)
+        S[tissue] = np.sqrt(B[tissue]**2/yc.size + V[tissue])
+
+    B = pd.DataFrame(B, index=data['snp_ids']).T
+    V = pd.DataFrame(V, index=data['snp_ids']).T
+    S = pd.DataFrame(S, index=data['snp_ids']).T
+    return B, S, V
+
+
+def get_gtex_summary_stats(ap):
+    associations = pd.read_csv(ap)
+    associations.loc[:, 'sample_size'] = (associations.ma_count / associations.maf / 2)
+    Ba = associations.pivot('tissue', 'variant_id', 'slope')
+    Va = associations.pivot('tissue', 'variant_id', 'slope_se')**2
+    n = associations.pivot('tissue', 'variant_id', 'sample_size')
+    Sa = np.sqrt(Ba**2/n + Va)
+    return Ba, Sa, Va, n
+
+
 def rehydrate_model(model):
     model.weight_means = np.zeros((model.dims['T'],model.dims['K'],model.dims['N']))
     model.weight_vars = np.ones((model.dims['T'],model.dims['K'],model.dims['N']))
 
     model.weight_means[:, :, model.records['snp_subset']] = model.records['mini_wm']
     model.weight_vars[:, :, model.records['snp_subset']] = model.records['mini_wv']
+
 
 def load_model(model_path, load_data=False):
     gene = model_path.split('/')[-2]
@@ -65,6 +145,7 @@ def load_model(model_path, load_data=False):
         data = make_gtex_genotype_data_dict(expression_path, genotype_path)
         model.__dict__.update(data)
     return model
+
 
 def compute_records(model):
     """
@@ -129,30 +210,6 @@ def compute_pip(model):
     return 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
 
 
-def plot_components(model, figsize=(15,5)):
-    active = model.records['active']
-    pip = compute_pip(model)
-
-    fig, ax = plt.subplots(1, 2, figsize=figsize)
-    sns.heatmap(
-        model.get_expected_weights()[:, active], yticklabels=model.tissue_ids,
-        cmap='RdBu', center=0, ax=ax[0])
-
-    pos = np.array([int(x.split('_')[1]) for x in model.snp_ids])
-    ax[1].scatter(pos, pip, c='k', marker='x')
-
-    for k in np.arange(model.dims['K'])[active]:
-        color_snps = np.isin(model.snp_ids, model.records['credible_sets'][k])
-        ax[1].scatter(pos[color_snps], pip[color_snps], s=100, marker='o', alpha=0.5, label='component {}'.format(k))
-
-    ax[1].set_xlabel('position')
-    ax[0].set_xlabel('component')
-    ax[0].set_ylabel('PIP')
-    ax[0].set_title('expected effect size')
-    ax[1].set_title('PIP')
-    plt.legend()
-
-
 def component_scores(model):
     purity = model.get_credible_sets(0.99)[1]
     active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])
@@ -173,18 +230,25 @@ def component_scores(model):
         )
     return weights
 
-def kl_components(m1, m2, purity_threshold=0.0):
+
+def kl_components(m1, m2, a1=None, a2=None, purity_threshold=0.0):
     """
     pairwise kl of components for 2 models
     """
-    a1 = m1.records['active']
-    a2 = m2.records['active']
+    if a1 is None:
+        a1 = np.ones(m1.dims['K']) > 0
+    if a2 is None:
+        a2 = np.ones(m2.dims['K']) > 0
+    #a1 = m1.records['active']
+    #a2 = m2.records['active']
+
     kls = np.array([[
         categorical_kl(m1.pi[k1], m2.pi[k2])
         + categorical_kl(m2.pi[k2], m1.pi[k1])
         for k1 in range(m1.dims['K']) if a1[k1]]
         for k2 in range(m2.dims['K']) if a2[k2]])
     return kls
+
 
 def make_variant_report(model, gene):
     PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
