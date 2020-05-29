@@ -12,11 +12,9 @@ def need_to_flip(variant_id):
     else:
         return False
 
-
 flip = lambda x: (x-1)*-1 + 1
 
-
-def load_gtex_genotype(genotype_path, standardize=False):
+def load_genotype(genotype_path, flip=False):
     """
     fetch genotype
     flip codings that are need to be flipped
@@ -28,12 +26,12 @@ def load_gtex_genotype(genotype_path, standardize=False):
 
     # recode genotypes
     coded_snp_ids = np.array([x.strip() for x in genotype.columns])
-    snp_ids = np.array(['_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids])
     snp_ids = {x: '_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids}
     genotype.rename(columns=snp_ids, inplace=True)
 
-    flips = np.array([need_to_flip(vid) for vid in coded_snp_ids])
-    genotype.iloc[:, flips] = genotype.iloc[:, flips].applymap(flip) 
+    if flip:
+        flips = np.array([need_to_flip(vid) for vid in coded_snp_ids])
+        genotype.iloc[:, flips] = genotype.iloc[:, flips].applymap(flip) 
     return genotype
 
 
@@ -48,10 +46,10 @@ def load_gtex_expression(expression_path):
     return gene_expression
 
 
-def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False):
+def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False, flip=False):
     # load expression
     gene_expression = load_gtex_expression(expression_path)
-    genotype = load_gtex_genotype(genotype_path)
+    genotype = load_genotype(genotype_path, flip)
 
     # center, mean immpute
     genotype = (genotype - genotype.mean(0))
@@ -127,19 +125,16 @@ def rehydrate_model(model):
     model.weight_vars[:, :, model.records['snp_subset']] = model.records['mini_wv']
 
 
-def load_model(model_path, load_data=False):
+def load_model(model_path, expression_path=None, genotype_path=None, load_data=False):
     gene = model_path.split('/')[-2]
     base_path = '/'.join(model_path.split('/')[:-1])
-    expression_path = '{}/{}.expression'.format(base_path, gene)
-    genotype_path = '{}/{}.raw'.format(base_path, gene)
+    if expression_path is None:
+        expression_path = '{}/{}.expression'.format(base_path, gene)
+    if genotype_path is None:
+        genotype_path = '{}/{}.raw'.format(base_path, gene)
 
     model = pickle.load(open(model_path, 'rb'))
-
-    model.weight_means = np.zeros((model.dims['T'],model.dims['K'],model.dims['N']))
-    model.weight_vars = np.ones((model.dims['T'],model.dims['K'],model.dims['N']))
-
-    model.weight_means[:, :, model.records['snp_subset']] = model.records['mini_wm']
-    model.weight_vars[:, :, model.records['snp_subset']] = model.records['mini_wv']
+    rehydrate_model(model)
 
     if load_data:
         data = make_gtex_genotype_data_dict(expression_path, genotype_path)
@@ -172,14 +167,71 @@ def compute_records(model):
     model.records = records
 
 
+def compute_records_gss(model):
+    """
+    save the model with data a weight parameters removed
+    add 'mini_weight_measn' and 'mini_weight_vars' to model
+    the model can be reconstituted in a small number of iterations
+    """
+    credible_sets, purity = model.get_credible_sets(0.999)
+    active = model.active.max(0) > 0.5
+    try:
+        snps = np.unique(np.concatenate([
+            credible_sets[k] for k in range(model.dims['K']) if active[k]]))
+    except Exception:
+        snps = np.unique(np.concatenate([
+            credible_sets[k][:5] for k in range(model.dims['K'])]))
+    mask = np.isin(model.snp_ids, snps)
+
+    wv = model.weight_vars[:, :, mask]
+    wm = model.weight_means[:, :, mask]
+
+    records = {
+        'active': active,
+        'purity': purity,
+        'credible_sets': credible_sets,
+        'mini_wm': wm,
+        'mini_wv': wv,
+        'snp_subset': mask
+    }
+    model.records = records
+
+
+def compute_records_css(model):
+    """
+    save the model with data a weight parameters removed
+    add 'mini_weight_measn' and 'mini_weight_vars' to model
+    the model can be reconstituted in a small number of iterations
+    """
+    credible_sets, purity = model.get_credible_sets(0.999)
+    active = model.active.max(0) > 0.5
+    try:
+        snps = np.unique(np.concatenate([
+            credible_sets[k] for k in range(model.dims['K']) if active[k]]))
+    except Exception:
+        snps = np.unique(np.concatenate([
+            credible_sets[k][:5] for k in range(model.dims['K'])]))
+    mask = np.isin(model.snp_ids, snps)
+
+    wv = model.weight_vars[:, :, mask]
+    wm = model.weight_means[:, :, mask]
+
+    records = {
+        'active': active,
+        'purity': purity,
+        'credible_sets': credible_sets,
+        'mini_wm': wm,
+        'mini_wv': wv,
+        'snp_subset': mask
+    }
+    model.records = records
+
 def strip_and_dump(model, path, save_data=False):
     """
     save the model with data a weight parameters removed
     add 'mini_weight_measn' and 'mini_weight_vars' to model
     the model can be reconstituted in a small number of iterations
     """
-    compute_records(model)
-
     # purge precompute
     for key in model.precompute:
         model.precompute[key] = {}
@@ -189,6 +241,7 @@ def strip_and_dump(model, path, save_data=False):
         model.__dict__.pop('X', None)
         model.__dict__.pop('Y', None)
         model.__dict__.pop('covariates', None)
+        model.__dict__.pop('LD', None)
     pickle.dump(model, open(path, 'wb'))
 
 
@@ -231,23 +284,58 @@ def component_scores(model):
     return weights
 
 
-def kl_components(m1, m2, a1=None, a2=None, purity_threshold=0.0):
+def kl_components(m1, m2):
     """
     pairwise kl of components for 2 models
     """
-    if a1 is None:
-        a1 = np.ones(m1.dims['K']) > 0
-    if a2 is None:
-        a2 = np.ones(m2.dims['K']) > 0
-    #a1 = m1.records['active']
-    #a2 = m2.records['active']
-
     kls = np.array([[
         categorical_kl(m1.pi[k1], m2.pi[k2])
         + categorical_kl(m2.pi[k2], m1.pi[k1])
-        for k1 in range(m1.dims['K']) if a1[k1]]
-        for k2 in range(m2.dims['K']) if a2[k2]])
+        for k1 in range(m1.dims['K'])] for k2 in range(m2.dims['K'])])
     return kls
+
+
+def kl_heatmap(m1, m2):
+    a1 = m1.records['active']
+    if not np.any(a1):
+        a1[0] = True
+    a2 = m2.records['active']
+    if not np.any(a2):
+        a2[0] = True
+    Q = kl_components(m1, m2).T
+    sns.heatmap(Q[a1][:, a2],
+                yticklabels=np.arange(20)[a1],
+                xticklabels=np.arange(20)[a2]
+               )
+    plt.xlabel('model2')
+    plt.ylabel('model1')
+
+
+def average_ld(m1, m2):
+    Q = np.zeros((m1.dims['K'], m2.dims['K']))
+    for k1 in range(m1.dims['K']):
+        for k2 in range(m2.dims['K']):
+            s1 = np.random.choice(m1.dims['N'], 10, replace=True, p=m1.pi[k1])
+            s2 = np.random.choice(m2.dims['N'], 10, replace=True, p=m2.pi[k2])
+            Q[k1, k2] = np.einsum('ms,ms->s', L[:, s1],  L[:, s2]).mean()
+    return Q
+
+
+def average_ld_heatmap(m1, m2):
+    a1 = m1.records['active']
+    if not np.any(a1):
+        a1[0] = True
+    a2 = m2.records['active']
+    if not np.any(a2):
+        a2[0] = True
+
+    Q = average_ld(m1, m2)
+    sns.heatmap(Q[a1][:, a2],
+                yticklabels=np.arange(20)[a1],
+                xticklabels=np.arange(20)[a2]
+               )
+    plt.xlabel('model2')
+    plt.ylabel('model1')
 
 
 def make_variant_report(model, gene):
