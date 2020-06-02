@@ -5,6 +5,7 @@ import os, sys, pickle
 from .utils import np_cache_class, gamma_logpdf
 from functools import lru_cache
 import pandas as pd
+from scipy.special import digamma
 import time
 
 class CAFEH:
