@@ -126,11 +126,13 @@ def rehydrate_model(model):
 
 
 def load_model(model_path, expression_path=None, genotype_path=None, load_data=False):
-    gene = model_path.split('/')[-2]
-    base_path = '/'.join(model_path.split('/')[:-1])
     if expression_path is None:
+        gene = model_path.split('/')[-2]
+        base_path = '/'.join(model_path.split('/')[:-1])
         expression_path = '{}/{}.expression'.format(base_path, gene)
     if genotype_path is None:
+        gene = model_path.split('/')[-2]
+        base_path = '/'.join(model_path.split('/')[:-1])
         genotype_path = '{}/{}.raw'.format(base_path, gene)
 
     model = pickle.load(open(model_path, 'rb'))
@@ -284,60 +286,6 @@ def component_scores(model):
     return weights
 
 
-def kl_components(m1, m2):
-    """
-    pairwise kl of components for 2 models
-    """
-    kls = np.array([[
-        categorical_kl(m1.pi[k1], m2.pi[k2])
-        + categorical_kl(m2.pi[k2], m1.pi[k1])
-        for k1 in range(m1.dims['K'])] for k2 in range(m2.dims['K'])])
-    return kls
-
-
-def kl_heatmap(m1, m2):
-    a1 = m1.records['active']
-    if not np.any(a1):
-        a1[0] = True
-    a2 = m2.records['active']
-    if not np.any(a2):
-        a2[0] = True
-    Q = kl_components(m1, m2).T
-    sns.heatmap(Q[a1][:, a2],
-                yticklabels=np.arange(20)[a1],
-                xticklabels=np.arange(20)[a2]
-               )
-    plt.xlabel('model2')
-    plt.ylabel('model1')
-
-
-def average_ld(m1, m2):
-    Q = np.zeros((m1.dims['K'], m2.dims['K']))
-    for k1 in range(m1.dims['K']):
-        for k2 in range(m2.dims['K']):
-            s1 = np.random.choice(m1.dims['N'], 10, replace=True, p=m1.pi[k1])
-            s2 = np.random.choice(m2.dims['N'], 10, replace=True, p=m2.pi[k2])
-            Q[k1, k2] = np.einsum('ms,ms->s', L[:, s1],  L[:, s2]).mean()
-    return Q
-
-
-def average_ld_heatmap(m1, m2):
-    a1 = m1.records['active']
-    if not np.any(a1):
-        a1[0] = True
-    a2 = m2.records['active']
-    if not np.any(a2):
-        a2[0] = True
-
-    Q = average_ld(m1, m2)
-    sns.heatmap(Q[a1][:, a2],
-                yticklabels=np.arange(20)[a1],
-                xticklabels=np.arange(20)[a2]
-               )
-    plt.xlabel('model2')
-    plt.ylabel('model1')
-
-
 def make_variant_report(model, gene):
     PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
     purity = model.get_credible_sets(0.99)[1]
@@ -371,3 +319,161 @@ def make_variant_report(model, gene):
     A.loc[:, 'gene_id'] = gene
     A = A.set_index(['chr', 'start', 'end'])
     return A.loc[:, ['gene_id', 'variant_id', 'ref', 'PIP', 'k', 'p', 'min_alpha']]
+
+
+def plot_components(self, thresh=0.5, save_path=None, show=True):
+    """
+    plot inducing point posteriors, weight means, and probabilities
+    """
+    weights = self.get_expected_weights()
+    active_components = self.active.max(0) > 0.5
+    if not np.any(active_components):
+        active_components[0] = True
+
+    fig, ax = plt.subplots(1, 3, figsize=(18, 4))
+    sns.heatmap(self.active[:, active_components], ax=ax[0],
+                cmap='Blues', xticklabels=np.arange(active_components.size)[active_components])
+    sns.heatmap(self.get_expected_weights()[:, active_components], ax=ax[1],
+                cmap='RdBu', center=0, xticklabels=np.arange(active_components.size)[active_components])
+
+    for k in np.arange(self.dims['K'])[active_components]:
+        ax[2].scatter(
+            np.arange(self.dims['N'])[self.pi.T[:, k] > 2/self.dims['N']],
+            self.pi.T[:, k][self.pi.T[:, k] > 2/self.dims['N']],
+            alpha=0.5, label='k{}'.format(k))
+    ax[2].scatter(np.arange(self.dims['N']), np.zeros(self.dims['N']), alpha=0.0)
+    ax[2].set_title('pi')
+    ax[2].set_xlabel('SNP')
+    ax[2].set_ylabel('probability')
+    ax[2].legend(bbox_to_anchor=(1.04,1), loc="upper left")
+
+
+def kl_components(m1, m2):
+    """
+    pairwise kl of components for 2 models
+    """
+    kls = np.array([[
+        categorical_kl(m1.pi[k1], m2.pi[k2])
+        + categorical_kl(m2.pi[k2], m1.pi[k1])
+        for k1 in range(m1.dims['K'])] for k2 in range(m2.dims['K'])])
+    return kls
+
+
+def kl_heatmap(m1, m2):
+    a1 = m1.records['active']
+    if not np.any(a1):
+        a1[0] = True
+    a2 = m2.records['active']
+    if not np.any(a2):
+        a2[0] = True
+    Q = kl_components(m1, m2).T
+    sns.heatmap(Q[a1][:, a2],
+                yticklabels=np.arange(20)[a1],
+                xticklabels=np.arange(20)[a2],
+                vmin=0, vmax=20, cmap='Greys_r',
+                linewidths=0.1, linecolor='k'
+               )
+    plt.title('Component KL')
+    plt.xlabel(m2.name)
+    plt.ylabel(m1.name)
+
+
+def average_ld(m1, m2, L):
+    Q = np.zeros((m1.dims['K'], m2.dims['K']))
+    for k1 in range(m1.dims['K']):
+        for k2 in range(m2.dims['K']):
+            s1 = np.random.choice(m1.dims['N'], 10, replace=True, p=m1.pi[k1])
+            s2 = np.random.choice(m2.dims['N'], 10, replace=True, p=m2.pi[k2])
+            Q[k1, k2] = np.einsum('ms,ms->s', L[:, s1],  L[:, s2]).mean()
+    return Q
+
+
+def average_ld_heatmap(m1, m2, L):
+    a1 = m1.records['active']
+    if not np.any(a1):
+        a1[0] = True
+    a2 = m2.records['active']
+    if not np.any(a2):
+        a2[0] = True
+
+    Q = average_ld(m1, m2, L)
+    sns.heatmap(Q[a1][:, a2],
+                yticklabels=np.arange(20)[a1],
+                xticklabels=np.arange(20)[a2],
+                center=0, cmap='RdBu_r'
+               )
+    plt.title('Average LD')
+    plt.xlabel(m2.name)
+    plt.ylabel(m1.name)
+
+
+def average_r2(m1, m2, L):
+    Q = np.zeros((m1.dims['K'], m2.dims['K']))
+    for k1 in range(m1.dims['K']):
+        for k2 in range(m2.dims['K']):
+            s1 = np.random.choice(m1.dims['N'], 10, replace=True, p=m1.pi[k1])
+            s2 = np.random.choice(m2.dims['N'], 10, replace=True, p=m2.pi[k2])
+            Q[k1, k2] = (np.einsum('ms,ms->s', L[:, s1],  L[:, s2])**2).mean()
+    return Q
+
+
+def average_r2_heatmap(m1, m2, L):
+    a1 = m1.records['active']
+    if not np.any(a1):
+        a1[0] = True
+    a2 = m2.records['active']
+    if not np.any(a2):
+        a2[0] = True
+
+    Q = average_ld(m1, m2, L)
+    sns.heatmap(Q[a1][:, a2],
+                yticklabels=np.arange(20)[a1],
+                xticklabels=np.arange(20)[a2],
+                vmin=0, vmax=1, cmap='Greys',
+                linewidths=0.1, linecolor='k',
+               )
+    plt.title('Average R2')
+    plt.xlabel(m2.name)
+    plt.ylabel(m1.name)
+
+kl_sum = lambda A1, A2, k1, k2: np.sum(
+    [categorical_kl(A1[:, t, k1], A2[: , t, k2]) for t in range(m1.dims['K'])])
+
+
+def active_kl(m1, m2):
+    A1 = np.stack([m1.active, 1 - m1.active])
+    A2 = np.stack([m2.active, 1 - m2.active])
+    kls = np.array([[
+        kl_sum(A1, A2, k1, k2) + kl_sum(A2, A2, k2, k1)
+        for k1 in range(m1.dims['K'])] for k2 in range(m2.dims['K'])])
+    return kls
+
+
+def active_kl_heatmap(m1, m2):
+    a1 = m1.records['active']
+    if not np.any(a1):
+        a1[0] = True
+    a2 = m2.records['active']
+    if not np.any(a2):
+        a2[0] = True
+    Q = active_kl(m1, m2).T
+    sns.heatmap(Q[a1][:, a2],
+                yticklabels=np.arange(20)[a1],
+                xticklabels=np.arange(20)[a2],
+                vmin=0, vmax=20, cmap='Greys_r',
+                linewidths=0.1, linecolor='k'
+               )
+    plt.title('Component Activity KL')
+    plt.xlabel(m2.name)
+    plt.ylabel(m1.name)
+
+
+def comparison_heatmaps(m1, m2, L):
+    fig, ax = plt.subplots(1, 3, figsize=(16, 4))
+    plt.sca(ax[0])
+    active_kl_heatmap(m1, m2)
+    plt.sca(ax[1])
+    kl_heatmap(m1, m2)
+    plt.sca(ax[2])
+    average_r2_heatmap(m1, m2, L)
+
