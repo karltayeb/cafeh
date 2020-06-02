@@ -51,7 +51,7 @@ def load_gtex_expression(expression_path):
 def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False, flip=False):
     # load expression
     gene_expression = load_gtex_expression(expression_path)
-    genotype = load_genotype(genotype_path, flip)
+    genotype, ref = load_genotype(genotype_path, flip)
 
     # center, mean immpute
     genotype = (genotype - genotype.mean(0))
