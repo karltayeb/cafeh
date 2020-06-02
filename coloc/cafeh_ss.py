@@ -2,7 +2,6 @@ import numpy as np
 from scipy.stats import norm
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl, normal_entropy, gamma_kl
 import os, sys, pickle
-from scipy.special import digamma
 from .utils import np_cache_class, gamma_logpdf
 from functools import lru_cache
 import pandas as pd
@@ -21,7 +20,7 @@ class CAFEH:
         """
 
         # set data
-        self.LD = LD  # N x N
+        self._LD = LD  # N x N
         self.B = B  # T x N z scores
         self.S = S  # T x N S from RSS likelihood
         # set priors
@@ -67,6 +66,14 @@ class CAFEH:
             'masks': {}
         }
         self.records = {}
+
+    @property
+    def LD(self):
+        if self._LD is None:
+            residual = self.compute_residual()
+            return np.corrcoef(residual.T)
+        else:
+            return self._LD
 
     @property
     def expected_tissue_precision(self):
@@ -384,7 +391,9 @@ class CAFEH:
         if residual is None:
             residual = self.compute_residual()
         ERSS = self._compute_ERSS()
-
+        self.tissue_precision_b = np.array([1 - (self._compute_quad_randomized[t] / self.sample_size[t])
+            for t in range(self.dims['T'])])
+        self.tissue_precision_a = np.ones(self.dims['T'])
         self.tissue_precision_a = self.c + self.sample_size / 2
         self.tissue_precision_b = self.d + ERSS / 2
 
