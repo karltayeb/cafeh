@@ -27,13 +27,15 @@ def load_genotype(genotype_path, flip=False):
     # recode genotypes
     coded_snp_ids = np.array([x.strip() for x in genotype.columns])
     snp_ids = {x: '_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids}
+    ref = {'_'.join(x.strip().split('_')[:-1]): x.strip().split('_')[-1] for x in coded_snp_ids}
+
+
     genotype.rename(columns=snp_ids, inplace=True)
 
     if flip:
         flips = np.array([need_to_flip(vid) for vid in coded_snp_ids])
         genotype.iloc[:, flips] = genotype.iloc[:, flips].applymap(flip) 
-    return genotype
-
+    return genotype, ref
 
 def load_gtex_expression(expression_path):
     """
