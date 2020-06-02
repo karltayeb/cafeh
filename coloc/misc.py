@@ -439,7 +439,7 @@ def average_r2_heatmap(m1, m2, L):
     plt.ylabel(m1.name)
 
 kl_sum = lambda A1, A2, k1, k2: np.sum(
-    [categorical_kl(A1[:, t, k1], A2[: , t, k2]) for t in range(m1.dims['K'])])
+    [categorical_kl(A1[:, t, k1], A2[:, t, k2]) for t in range(A1.shape[1])])
 
 
 def active_kl(m1, m2):
