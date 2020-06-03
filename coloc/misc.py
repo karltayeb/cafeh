@@ -400,8 +400,8 @@ def average_ld_heatmap(m1, m2, L):
 
     Q = average_ld(m1, m2, L)
     sns.heatmap(Q[a1][:, a2],
-                yticklabels=np.arange(20)[a1],
-                xticklabels=np.arange(20)[a2],
+                yticklabels=np.arange(a1.size)[a1],
+                xticklabels=np.arange(a2.size)[a2],
                 center=0, cmap='RdBu_r'
                )
     plt.title('Average LD')
@@ -429,8 +429,8 @@ def average_r2_heatmap(m1, m2, L):
 
     Q = average_ld(m1, m2, L)
     sns.heatmap(Q[a1][:, a2],
-                yticklabels=np.arange(20)[a1],
-                xticklabels=np.arange(20)[a2],
+                yticklabels=np.arange(m1.dims['K'])[a1],
+                xticklabels=np.arange(m2.dims['K'])[a2],
                 vmin=0, vmax=1, cmap='Greys',
                 linewidths=0.1, linecolor='k',
                )
@@ -439,8 +439,7 @@ def average_r2_heatmap(m1, m2, L):
     plt.ylabel(m1.name)
 
 kl_sum = lambda A1, A2, k1, k2: np.sum(
-    [categorical_kl(A1[:, t, k1], A2[:, t, k2]) for t in range(A1.shape[1])])
-
+    [categorical_kl(A1[:, t, k1], A2[:, t, k2]) for t in range(A1.shape[1] )])
 
 def active_kl(m1, m2):
     A1 = np.stack([m1.active, 1 - m1.active])
@@ -460,8 +459,8 @@ def active_kl_heatmap(m1, m2):
         a2[0] = True
     Q = active_kl(m1, m2).T
     sns.heatmap(Q[a1][:, a2],
-                yticklabels=np.arange(20)[a1],
-                xticklabels=np.arange(20)[a2],
+                yticklabels=np.arange(m1.dims['K'])[a1],
+                xticklabels=np.arange(m2.dims['K'])[a2],
                 vmin=0, vmax=20, cmap='Greys_r',
                 linewidths=0.1, linecolor='k'
                )
