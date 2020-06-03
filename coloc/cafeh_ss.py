@@ -21,7 +21,7 @@ class CAFEH:
         """
 
         # set data
-        self._LD = LD  # N x N
+        self.LD = LD  # N x N
         self.B = B  # T x N z scores
         self.S = S  # T x N S from RSS likelihood
         # set priors
@@ -49,7 +49,7 @@ class CAFEH:
         self.weight_precision_b = np.ones((T, K))
 
         self.c = 1e-10
-        self.d=1e-10
+        self.d = 1e-10
 
         # variational paramters for (beta distributed) variance proportions
         self.tissue_precision_a = np.ones(T)
@@ -67,14 +67,6 @@ class CAFEH:
             'masks': {}
         }
         self.records = {}
-
-    @property
-    def LD(self):
-        if self._LD is None:
-            residual = self.compute_residual()
-            return np.corrcoef(residual.T)
-        else:
-            return self._LD
 
     @property
     def expected_tissue_precision(self):
