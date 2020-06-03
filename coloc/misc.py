@@ -370,8 +370,8 @@ def kl_heatmap(m1, m2):
         a2[0] = True
     Q = kl_components(m1, m2).T
     sns.heatmap(Q[a1][:, a2],
-                yticklabels=np.arange(20)[a1],
-                xticklabels=np.arange(20)[a2],
+                yticklabels=np.arange(a1.size)[a1],
+                xticklabels=np.arange(a2.size)[a2],
                 vmin=0, vmax=20, cmap='Greys_r',
                 linewidths=0.1, linecolor='k'
                )
