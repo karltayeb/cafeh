@@ -445,7 +445,7 @@ def active_kl(m1, m2):
     A1 = np.stack([m1.active, 1 - m1.active])
     A2 = np.stack([m2.active, 1 - m2.active])
     kls = np.array([[
-        kl_sum(A1, A2, k1, k2) + kl_sum(A2, A2, k2, k1)
+        kl_sum(A1, A2, k1, k2) + kl_sum(A2, A1, k2, k1)
         for k1 in range(m1.dims['K'])] for k2 in range(m2.dims['K'])])
     return kls
 
