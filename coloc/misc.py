@@ -57,12 +57,50 @@ def need_to_flip(variant_id):
 
 flip = lambda x: (x-1)*-1 + 1
 
-def load_gtex_genotype():
-    pass
+def load_gtex_genotype(gene):
+    gp = '../../output/GTEx/chr2/{}/{}.raw'.format(gene, gene)
+    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    v2r = json.load(open(v2rp, 'r'))
+    table = make_snp_format_table(gene)
 
-def load_1kG_genotype():
-    pass
-    
+    # Load GTEx and 1kG genotype
+    # flip genotype encoding to be consistent with GTEx associations
+    print('loading gtex genotypes...')
+
+    genotype = pd.read_csv(gp, sep=' ')
+    genotype = genotype.set_index('IID').iloc[:, 5:]
+
+    # recode genotypes
+    coded_snp_ids = np.array([x.strip() for x in genotype.columns])
+    snp_ids = {x: '_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids}
+    genotype.rename(columns=snp_ids, inplace=True)
+
+    flip_gtex = table[table.flip_gtex].variant_id.values
+    flip_gtex = np.intersect1d(flip_gtex, genotype.columns)
+    genotype.loc[:, flip_gtex] = genotype.loc[:, flip_gtex].applymap(flip)
+    genotype.rename(columns=v2r, inplace=True)
+    return genotype
+
+def load_1kG_genotype(gene):
+    gp1kG = '../../output/GTEx/chr2/{}/{}.1kG.raw'.format(gene, gene)
+    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    v2r = json.load(open(v2rp, 'r'))
+
+    table = make_snp_format_table(gene)
+
+    genotype = pd.read_csv(gp1kG, sep=' ')
+    genotype = genotype.set_index('IID').iloc[:, 5:]
+
+    # recode genotypes
+    coded_snp_ids = np.array([x.strip() for x in genotype.columns])
+    snp_ids = {x: '_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids}
+    genotype.rename(columns=snp_ids, inplace=True)
+
+    flip_1kG = table[table.flip_1kG & (table.rsid != '-')].rsid.values
+    flip_1kG = np.intersect1d(flip_1kG, genotype.columns)
+    genotype.loc[:, flip_1kG] = genotype.loc[:, flip_1kG].applymap(flip)
+    return genotype
+
 def load_genotype(genotype_path, flip=False):
     """
     fetch genotype
