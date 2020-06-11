@@ -3,7 +3,50 @@ import pandas as pd
 import pickle
 import matplotlib.pyplot as plt
 import seaborn as sns
+import json
 from .kls import categorical_kl
+
+def make_snp_format_table(gene):
+    ep = '../../output/GTEx/chr2/{}/{}.expression'.format(gene, gene)
+    gp = '../../output/GTEx/chr2/{}/{}.raw'.format(gene, gene)
+    gp1kG = '../../output/GTEx/chr2/{}/{}.1kG.raw'.format(gene, gene)
+    ap = '../../output/GTEx/chr2/{}/{}.associations'.format(gene, gene)
+    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    v2r = json.load(open(v2rp, 'r'))
+ 
+    with open(gp, 'r') as f:
+        snps = f.readline().strip().split()[6:]
+
+    with open(gp1kG, 'r') as f:
+        rsids = f.readline().strip().split()[6:]
+
+    vid_codes = {'_'.join(x.split('_')[:-1]): x.split('_')[-1] for x in snps}
+    rsid_codes = {x.split('_')[0]: x.split('_')[1] for x in rsids}
+    table = []
+    for vid in vid_codes:
+        ref = vid.split('_')[-2]
+        rsid = v2r.get(vid, '-')
+        table.append({
+            'variant_id': vid,
+            'rsid': v2r.get(vid, '-'),
+            'ref': ref,
+            'flip_gtex': ref != vid_codes.get(vid, '-'),
+            'flip_1kG': ref != rsid_codes.get(rsid, '-')
+        })
+    return pd.DataFrame(table)
+
+def cov2corr(X):
+    """
+    scale covariance matrix to correlaton matrix
+    """
+    diag = np.sqrt(np.diag(X))
+    return (1/diag[:, None]) * X * (1/diag[None])
+
+def load(model_path):
+    model = pickle.load(open(model_path, 'rb'))
+    rehydrate_model(model)
+    model.name = model_path.split('/')[-1]
+    return model
 
 def need_to_flip(variant_id):
     _, _, major, minor, _, ref = variant_id.strip().split('_')
@@ -14,6 +57,12 @@ def need_to_flip(variant_id):
 
 flip = lambda x: (x-1)*-1 + 1
 
+def load_gtex_genotype():
+    pass
+
+def load_1kG_genotype():
+    pass
+    
 def load_genotype(genotype_path, flip=False):
     """
     fetch genotype
@@ -28,8 +77,6 @@ def load_genotype(genotype_path, flip=False):
     coded_snp_ids = np.array([x.strip() for x in genotype.columns])
     snp_ids = {x: '_'.join(x.strip().split('_')[:-1]) for x in coded_snp_ids}
     ref = {'_'.join(x.strip().split('_')[:-1]): x.strip().split('_')[-1] for x in coded_snp_ids}
-
-
     genotype.rename(columns=snp_ids, inplace=True)
 
     if flip:
@@ -65,6 +112,7 @@ def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=Fal
     individuals = np.intersect1d(genotype.index.values, gene_expression.columns.values)
     genotype = genotype.loc[individuals]
     gene_expression = gene_expression.loc[:, individuals]
+
 
     # load covariates
     covariates = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/covariates.csv', sep='\t', index_col=[0, 1])
