@@ -6,12 +6,16 @@ import seaborn as sns
 import json
 from .kls import categorical_kl
 
+gc = pd.read_csv('../../output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
+gc.set_index('gene', inplace=True)
+get_chromosome = lambda gene: gc.loc[gene].chromosome
+
 def make_snp_format_table(gene):
-    ep = '../../output/GTEx/chr2/{}/{}.expression'.format(gene, gene)
-    gp = '../../output/GTEx/chr2/{}/{}.raw'.format(gene, gene)
-    gp1kG = '../../output/GTEx/chr2/{}/{}.1kG.raw'.format(gene, gene)
-    ap = '../../output/GTEx/chr2/{}/{}.associations'.format(gene, gene)
-    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    ep = '../../output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
+    gp = '../../output/GTEx/{}/{}/{}.raw'.format(get_chromosome(gene), gene, gene)
+    gp1kG = '../../output/GTEx/{}/{}/{}.1kG.raw'.format(get_chromosome(gene), gene, gene)
+    ap = '../../output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
+    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
  
     with open(gp, 'r') as f:
@@ -58,8 +62,8 @@ def need_to_flip(variant_id):
 flip = lambda x: (x-1)*-1 + 1
 
 def load_gtex_genotype(gene):
-    gp = '../../output/GTEx/chr2/{}/{}.raw'.format(gene, gene)
-    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    gp = '../../output/GTEx/{}/{}/{}.raw'.format(get_chromosome(gene), gene, gene)
+    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
     table = make_snp_format_table(gene)
 
@@ -82,8 +86,8 @@ def load_gtex_genotype(gene):
     return genotype
 
 def load_1kG_genotype(gene):
-    gp1kG = '../../output/GTEx/chr2/{}/{}.1kG.raw'.format(gene, gene)
-    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    gp1kG = '../../output/GTEx/{}/{}/{}.1kG.raw'.format(get_chromosome(gene), gene, gene)
+    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
 
     table = make_snp_format_table(gene)
@@ -102,8 +106,8 @@ def load_1kG_genotype(gene):
     return genotype
 
 def load_gtex_summary_stats(gene):
-    ap = '../../output/GTEx/chr2/{}/{}.associations'.format(gene, gene)
-    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    ap = '../../output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
+    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
 
     associations = pd.read_csv(ap)
