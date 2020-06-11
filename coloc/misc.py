@@ -101,6 +101,21 @@ def load_1kG_genotype(gene):
     genotype.loc[:, flip_1kG] = genotype.loc[:, flip_1kG].applymap(flip)
     return genotype
 
+def load_gtex_summary_stats(gene):
+    ap = '../../output/GTEx/chr2/{}/{}.associations'.format(gene, gene)
+    v2rp = '../../output/GTEx/chr2/{}/{}.snp2rsid.json'.format(gene, gene)
+    v2r = json.load(open(v2rp, 'r'))
+
+    associations = pd.read_csv(ap)
+    associations.loc[:, 'sample_size'] = (associations.ma_count / associations.maf / 2)
+    Ba = associations.pivot('tissue', 'variant_id', 'slope')
+    Va = associations.pivot('tissue', 'variant_id', 'slope_se')**2
+    n = associations.pivot('tissue', 'variant_id', 'sample_size')
+    Sa = np.sqrt(Ba**2/n + Va)
+
+    [x.rename(columns=v2r, inplace=True) for x in [B, S, V, n]];
+    return Ba, Sa, Va, n
+
 def load_genotype(genotype_path, flip=False):
     """
     fetch genotype
@@ -193,16 +208,6 @@ def compute_summary_stats(data):
     V = pd.DataFrame(V, index=data['snp_ids']).T
     S = pd.DataFrame(S, index=data['snp_ids']).T
     return B, S, V
-
-
-def get_gtex_summary_stats(ap):
-    associations = pd.read_csv(ap)
-    associations.loc[:, 'sample_size'] = (associations.ma_count / associations.maf / 2)
-    Ba = associations.pivot('tissue', 'variant_id', 'slope')
-    Va = associations.pivot('tissue', 'variant_id', 'slope_se')**2
-    n = associations.pivot('tissue', 'variant_id', 'sample_size')
-    Sa = np.sqrt(Ba**2/n + Va)
-    return Ba, Sa, Va, n
 
 
 def rehydrate_model(model):
