@@ -113,7 +113,7 @@ def load_gtex_summary_stats(gene):
     n = associations.pivot('tissue', 'variant_id', 'sample_size')
     Sa = np.sqrt(Ba**2/n + Va)
 
-    [x.rename(columns=v2r, inplace=True) for x in [B, S, V, n]];
+    [x.rename(columns=v2r, inplace=True) for x in [Ba, Sa, Va, n]];
     return Ba, Sa, Va, n
 
 def load_genotype(genotype_path, flip=False):
