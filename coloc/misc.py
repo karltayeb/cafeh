@@ -45,7 +45,7 @@ def make_snp_format_table(gene):
 
 def get_common_snps(gene):
     table = make_snp_format_table(gene)
-    return table[table.has_test & table.in_1kG]
+    return table[table.has_test & table.in_1kG].rsid.values
 
 def cov2corr(X):
     """
