@@ -582,6 +582,35 @@ def active_kl(m1, m2):
         for k1 in range(m1.dims['K'])] for k2 in range(m2.dims['K'])])
     return kls
 
+def _active_overlap(a, b):
+    """
+    active_in_both / active_in_either
+    return 0 if none active
+    """ 
+    active_in_both = (a & b).sum()
+    active_in_either = (a | b).sum()
+    if active_in_either > 0:
+        return active_in_both / active_in_either
+    return 0
+
+def active_overlap(m1, m2):
+    """
+    active_in_both / active_in_either
+    return 0 if none active
+    """ 
+    overlap = np.array([[
+        _active_overlap(a, b)
+        for a in m1.active.T] for b in m2.active.T])
+    return overlap
+
+    a = m1.active[:, 0] > 0.5
+    b = m1.active[:, 0] > 0.5
+    active_in_both = (a & b).sum()
+    active_in_either = (a | b).sum()
+    if active_in_either > 0:
+        return active_in_both / active_in_either
+    else:
+        return 0
 
 def active_kl_heatmap(m1, m2):
     a1 = m1.records['active']
