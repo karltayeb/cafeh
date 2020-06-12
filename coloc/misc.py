@@ -286,9 +286,6 @@ def make_simulation(causal_per_tissue, total_causal_snps, num_tissues, pve, sim_
 
     if sim_id is None:
         sim_id = randomString(5)
-    sim_dir = '/work-zfs/abattle4/karl/cosie_analysis/output/sim/ld/{}'.format(sim_id)
-    if not os.path.isdir(sim_dir):
-        os.mkdir(sim_dir)
 
     # set random seed with function of sim_id so we can recreate
     np.random.seed(abs(hash(sim_id)) % 100000000)
@@ -320,19 +317,6 @@ def make_simulation(causal_per_tissue, total_causal_snps, num_tissues, pve, sim_
     V = pd.DataFrame(np.stack([x[1] for x in summary_stats]), columns=data.common_snps)
     S = pd.DataFrame(np.stack([np.sqrt(x[2]) for x in summary_stats]), columns=data.common_snps)
 
-    regen = {
-        'causal_per_tissue': causal_per_tissue,
-        'total_causal_snps': total_causal_snps,
-        'num_tissues': num_tissues,
-        'pve': pve,
-        'sim_id': sim_id
-    }
-    # json.dump(regen, open('{}/{}.sim.key'.format(sim_dir, sim_id), 'w'))
-    sim_params = {
-        'true_effects': true_effects,
-        'causal_snps': causal_snps,
-        'tisse_variance': tissue_variance
-    }
     # pickle.dump(sim_params, open('{}/{}.sim.params'.format(sim_dir, sim_id), 'wb'))
     return SimpleNamespace(**{
         'B': B, 'S': S, 'V': V,
@@ -340,12 +324,13 @@ def make_simulation(causal_per_tissue, total_causal_snps, num_tissues, pve, sim_
         'genotype_1kG': data.genotype_1kG,
         'genotype': data.genotype_gtex,
         'X': data.X, 'X1kG': data.X1kG, 'common_snps': data.common_snps,
-        'covariates': None, 'gene': data.gene, 'sim_id': sim_id, 'id': sim_id,
+        'covariates': None, 'gene': data.gene,
         'true_effects': true_effects,
         'causal_snps': causal_snps, 'tissue_variance': tissue_variance,
         'causal_per_tissue': causal_per_tissue,
         'total_causal_snps': total_causal_snps,
-        'num_tissues': num_tissues, 'pve': pve
+        'num_tissues': num_tissues, 'pve': pve,
+        'sim_id': sim_id, 'id': sim_id
     })
 
 
