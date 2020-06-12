@@ -179,6 +179,15 @@ def load_gtex_residual_expression(gene):
     residual_expression = pd.DataFrame(residual_expression).T
     return residual_expression.loc[expression.index].loc[:, expression.columns]
 
+def center_mean_impute(genotype):
+        """
+        center columns of dataframe
+        fill na with 0 (mean imputation)
+        """
+        X = genotype - genotype.mean()
+        X = X.fillna(0)
+        return X
+
 def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False, flip=False):
     # load expression
     gene_expression = load_gtex_expression(expression_path)
@@ -504,6 +513,8 @@ def kl_heatmap(m1, m2):
 
 def average_ld(m1, m2, L):
     Q = np.zeros((m1.dims['K'], m2.dims['K']))
+    if L is None:
+        return Q
     for k1 in range(m1.dims['K']):
         for k2 in range(m2.dims['K']):
             s1 = np.random.choice(m1.dims['N'], 10, replace=True, p=m1.pi[k1])
