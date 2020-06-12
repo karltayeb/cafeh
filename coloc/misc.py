@@ -614,6 +614,24 @@ def active_overlap(m1, m2):
     else:
         return 0
 
+def active_overlap_heatmap(m1, m2):
+    a1 = m1.records['active']
+    if not np.any(a1):
+        a1[0] = True
+    a2 = m2.records['active']
+    if not np.any(a2):
+        a2[0] = True
+    Q = active_overlap(m1, m2).T
+    sns.heatmap(Q[a1][:, a2],
+                yticklabels=np.arange(m1.dims['K'])[a1],
+                xticklabels=np.arange(m2.dims['K'])[a2],
+                vmin=0, vmax=1, cmap='Greys',
+                linewidths=0.1, linecolor='k'
+               )
+    plt.title('Component Activity Overlap')
+    plt.xlabel(m2.name)
+    plt.ylabel(m1.name)
+
 def active_kl_heatmap(m1, m2):
     a1 = m1.records['active']
     if not np.any(a1):
@@ -636,7 +654,7 @@ def active_kl_heatmap(m1, m2):
 def comparison_heatmaps(m1, m2, L):
     fig, ax = plt.subplots(1, 3, figsize=(16, 4))
     plt.sca(ax[0])
-    active_kl_heatmap(m1, m2)
+    active_overlap_heatmap(m1, m2)
     plt.sca(ax[1])
     kl_heatmap(m1, m2)
     plt.sca(ax[2])
