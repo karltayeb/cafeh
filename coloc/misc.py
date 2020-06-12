@@ -7,6 +7,8 @@ import json
 from .kls import categorical_kl
 from types import SimpleNamespace
 import os
+import random
+import string
 
 gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
 gc.set_index('gene', inplace=True)
@@ -268,6 +270,7 @@ def linregress(y, X):
     var = np.var(y[:, None] - betas * X, 0) / diag
     s2 = betas**2 / y.size + var
     return betas, var, s2
+
 
 def make_simulation(causal_per_tissue, total_causal_snps, num_tissues, pve, sim_id=None):
     """
