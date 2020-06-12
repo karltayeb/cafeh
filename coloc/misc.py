@@ -25,6 +25,7 @@ def make_snp_format_table(gene):
         rsids = f.readline().strip().split()[6:]
         
     summary_stat_snps = np.unique(pd.read_csv(ap, sep=',', usecols=[3]).variant_id)
+    summary_stat_snps = {snp: True for snp in summary_stat_snps}
     vid_codes = {'_'.join(x.split('_')[:-1]): x.split('_')[-1] for x in snps}
     rsid_codes = {x.split('_')[0]: x.split('_')[1] for x in rsids}
     table = []
@@ -37,10 +38,14 @@ def make_snp_format_table(gene):
             'ref': ref,
             'flip_gtex': ref != vid_codes.get(vid, '-'),
             'flip_1kG': ref != rsid_codes.get(rsid, '-'),
-            'in_1kG': rsid in rsid_codes,
-            'has_test': vid in summary_stat_snps
+            'in_1kG': rsid_codes.get(rsid, False) != False,
+            'has_test': summary_stat_snps.get(vid, False)
         })
     return pd.DataFrame(table)
+
+def get_common_snps(gene):
+    table = make_snp_format_table(gene)
+    return table[table.has_test & table.in_1kG]
 
 def cov2corr(X):
     """
