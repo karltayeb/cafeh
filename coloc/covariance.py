@@ -16,5 +16,10 @@ ledoit_wolf_reference_ld = lambda data: cov2corr(covariance.ledoit_wolf(data.X1k
 ledoit_wolf_z_ld = lambda data: cov2corr(covariance.ledoit_wolf(data.B.values / np.sqrt(data.V.values))[0])
 z3_ld = lambda data: z_ld(data)**3
 
-def ref_z_ld(data, alpha):
-	return alpha * refernce_ld(data) + (1 - alpha) * z_ld(data)
+def ref_z_ld(data, alpha=None):
+    """
+    mix reference ld and zscore ld
+    """
+    if alpha is None:
+        alpha = data.X1kG.shape[0] / (data.X1kG.shape[0] + data.B.shape[0])
+    return alpha * refernce_ld(data) + (1 - alpha) * z_ld(data)
