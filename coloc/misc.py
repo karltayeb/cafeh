@@ -155,7 +155,7 @@ def load_gtex_expression(gene):
     """
     # load expression
     ep = '../../output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
-    gene_expression = pd.read_csv(expression_path, sep='\t', index_col=0)
+    gene_expression = pd.read_csv(ep, sep='\t', index_col=0)
     # drop individuals that do not have recorded expression
     gene_expression = gene_expression.loc[:, ~np.all(np.isnan(gene_expression), 0)]
     return gene_expression
