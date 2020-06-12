@@ -17,13 +17,14 @@ def make_snp_format_table(gene):
     ap = '../../output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
     v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
- 
+
     with open(gp, 'r') as f:
         snps = f.readline().strip().split()[6:]
 
     with open(gp1kG, 'r') as f:
         rsids = f.readline().strip().split()[6:]
-
+        
+    summary_stat_snps = np.unique(pd.read_csv(ap, sep=',', usecols=[3]).variant_id)
     vid_codes = {'_'.join(x.split('_')[:-1]): x.split('_')[-1] for x in snps}
     rsid_codes = {x.split('_')[0]: x.split('_')[1] for x in rsids}
     table = []
@@ -35,7 +36,9 @@ def make_snp_format_table(gene):
             'rsid': v2r.get(vid, '-'),
             'ref': ref,
             'flip_gtex': ref != vid_codes.get(vid, '-'),
-            'flip_1kG': ref != rsid_codes.get(rsid, '-')
+            'flip_1kG': ref != rsid_codes.get(rsid, '-'),
+            'in_1kG': rsid in rsid_codes,
+            'has_test': vid in summary_stat_snps
         })
     return pd.DataFrame(table)
 
