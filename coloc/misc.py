@@ -290,7 +290,7 @@ def make_simulation(causal_per_tissue, total_causal_snps, num_tissues, pve, sim_
     # set random seed with function of sim_id so we can recreate
     np.random.seed(abs(hash(sim_id)) % 100000000)
     gene = np.random.choice(genes)
-    data = load_gene_data(gene)
+    data = load_gene_data(gene, thin=True)
     M, N = data.X.shape
 
     # sample causal snps
