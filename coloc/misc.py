@@ -149,11 +149,12 @@ def load_genotype(genotype_path, flip=False):
         genotype.iloc[:, flips] = genotype.iloc[:, flips].applymap(flip) 
     return genotype, ref
 
-def load_gtex_expression(expression_path):
+def load_gtex_expression(gene):
     """
     load expression, drop unexpressed individuals
     """
     # load expression
+    ep = '../../output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
     gene_expression = pd.read_csv(expression_path, sep='\t', index_col=0)
     # drop individuals that do not have recorded expression
     gene_expression = gene_expression.loc[:, ~np.all(np.isnan(gene_expression), 0)]
