@@ -160,6 +160,24 @@ def load_gtex_expression(gene):
     gene_expression = gene_expression.loc[:, ~np.all(np.isnan(gene_expression), 0)]
     return gene_expression
 
+def load_gtex_residual_expression(gene):
+    """
+    load residual expression as dataframe
+    """
+    expression = load_gtex_expression(gene)
+    covariates = pd.read_csv(
+        '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/covariates.csv',
+        sep='\t', index_col=[0, 1])
+
+    residual_expression = {}
+    for tissue in expression.index.values:
+        samples = expression.columns.values[~np.isnan(expression.loc[tissue])]
+        beta = np.linalg.pinv(covariates.loc[tissue, samples].T) @ expression.loc[tissue, samples]
+        residual_expression[tissue] = \
+            expression.loc[tissue, samples] - covariates.loc[tissue, samples].T @ beta
+
+    residual_expression = pd.DataFrame(residual_expression).T
+    return residual_expression.loc[expression.index].loc[:, expression.columns]
 
 def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False, flip=False):
     # load expression
