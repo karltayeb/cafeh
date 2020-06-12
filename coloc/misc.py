@@ -5,6 +5,8 @@ import matplotlib.pyplot as plt
 import seaborn as sns
 import json
 from .kls import categorical_kl
+from types import SimpleNamespace
+import os
 
 gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
 gc.set_index('gene', inplace=True)
@@ -43,9 +45,11 @@ def make_snp_format_table(gene):
         })
     return pd.DataFrame(table)
 
+
 def get_common_snps(gene):
     table = make_snp_format_table(gene)
     return table[table.has_test & table.in_1kG].rsid.values
+
 
 def cov2corr(X):
     """
@@ -54,11 +58,13 @@ def cov2corr(X):
     diag = np.sqrt(np.diag(X))
     return (1/diag[:, None]) * X * (1/diag[None])
 
+
 def load(model_path):
     model = pickle.load(open(model_path, 'rb'))
     rehydrate_model(model)
     model.name = model_path.split('/')[-1]
     return model
+
 
 def need_to_flip(variant_id):
     _, _, major, minor, _, ref = variant_id.strip().split('_')
@@ -67,7 +73,9 @@ def need_to_flip(variant_id):
     else:
         return False
 
+
 flip = lambda x: (x-1)*-1 + 1
+
 
 def load_gtex_genotype(gene):
     gp = '../../output/GTEx/{}/{}/{}.raw'.format(get_chromosome(gene), gene, gene)
@@ -93,6 +101,7 @@ def load_gtex_genotype(gene):
     genotype.rename(columns=v2r, inplace=True)
     return genotype
 
+
 def load_1kG_genotype(gene):
     gp1kG = '../../output/GTEx/{}/{}/{}.1kG.raw'.format(get_chromosome(gene), gene, gene)
     v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
@@ -113,6 +122,7 @@ def load_1kG_genotype(gene):
     genotype.loc[:, flip_1kG] = genotype.loc[:, flip_1kG].applymap(flip)
     return genotype
 
+
 def load_gtex_summary_stats(gene):
     ap = '../../output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
     v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
@@ -127,6 +137,7 @@ def load_gtex_summary_stats(gene):
 
     [x.rename(columns=v2r, inplace=True) for x in [Ba, Sa, Va, n]];
     return Ba, Sa, Va, n
+
 
 def load_genotype(genotype_path, flip=False):
     """
@@ -149,6 +160,7 @@ def load_genotype(genotype_path, flip=False):
         genotype.iloc[:, flips] = genotype.iloc[:, flips].applymap(flip) 
     return genotype, ref
 
+
 def load_gtex_expression(gene):
     """
     load expression, drop unexpressed individuals
@@ -159,6 +171,7 @@ def load_gtex_expression(gene):
     # drop individuals that do not have recorded expression
     gene_expression = gene_expression.loc[:, ~np.all(np.isnan(gene_expression), 0)]
     return gene_expression
+
 
 def load_gtex_residual_expression(gene):
     """
@@ -179,6 +192,7 @@ def load_gtex_residual_expression(gene):
     residual_expression = pd.DataFrame(residual_expression).T
     return residual_expression.loc[expression.index].loc[:, expression.columns]
 
+
 def center_mean_impute(genotype):
         """
         center columns of dataframe
@@ -187,6 +201,150 @@ def center_mean_impute(genotype):
         X = genotype - genotype.mean()
         X = X.fillna(0)
         return X
+
+
+def load_gene_data(gene, thin=False):
+    # Load GTEx and 1kG genotype
+    # flip genotype encoding to be consistent with GTEx associations
+    print('loading genotypes...')
+    genotype = load_gtex_genotype(gene)
+    genotype1kG = load_1kG_genotype(gene)
+
+    print('loading expression...')
+    expression = load_gtex_expression(gene)
+
+    # load GTEx summary stats
+    print('loading associations...')
+    B, S, V, n = load_gtex_summary_stats(gene)
+
+    # filter down to list of snps present in GTEx and 1kG
+    print('filtering down to common snps')
+    common_snps = get_common_snps(gene)
+
+    if thin:
+        d = int(common_snps.size / 1000)
+        common_snps = common_snps[::d]
+
+    genotype = genotype.loc[:, common_snps]
+    genotype1kG = genotype1kG.loc[:, common_snps]
+    B = B.loc[:, common_snps]
+    S = S.loc[:, common_snps]
+    V = V.loc[:, common_snps]
+    n = n.loc[:, common_snps]
+
+    X = center_mean_impute(genotype).values
+    X1kG = center_mean_impute(genotype1kG).values
+
+    covariates = pd.read_csv(
+        '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/covariates.csv', sep='\t', index_col=[0, 1])
+    covariates = covariates.loc[expression.index].loc[:, genotype.index.values]
+
+    return SimpleNamespace(**{
+        'genotype_1kG': genotype1kG.loc[:, common_snps],
+        'genotype_gtex': genotype.loc[:, common_snps],
+        'X': X, 'X1kG': X1kG, 'expression': expression,
+        'B': B, 'S': S, 'V':V, 'n':n, 'common_snps': common_snps,
+        'gene': gene, 'id': gene, 'covariates': covariates
+    })
+
+
+def randomString(stringLength=8):
+    letters = string.ascii_lowercase
+    return ''.join(random.choice(letters) for i in range(stringLength))
+
+
+def compute_sigma2(X, true_effect, pve):
+    var = np.var(true_effect @ X.T)
+    sigma2_t = var/pve - var
+    if sigma2_t == 0:
+        # if variance is 0, there were no causal variants-- dont care what the variance is
+        sigma2_t = 1.0
+    return sigma2_t
+
+
+def linregress(y, X):
+    diag = np.einsum('ij,ij->i', X.T, X.T)
+    betas = y @ X / diag
+    var = np.var(y[:, None] - betas * X, 0) / diag
+    s2 = betas**2 / y.size + var
+    return betas, var, s2
+
+def make_simulation(causal_per_tissue, total_causal_snps, num_tissues, pve, sim_id=None):
+    """
+    genotype is genotype
+    causal_per_tissue is the number of causal variants per tissue
+    total_causal_snps is the total number of causal variants
+    num_tissues is the number of tissues
+    pve is the percent variance explained by genotype
+    """
+
+    genes = [x.split('/')[-2] for x in np.loadtxt(
+        '/work-zfs/abattle4/karl/cosie_analysis/output/sim/ld/1kgenes.txt', dtype=str)]
+
+    if sim_id is None:
+        sim_id = randomString(5)
+    sim_dir = '/work-zfs/abattle4/karl/cosie_analysis/output/sim/ld/{}'.format(sim_id)
+    if not os.path.isdir(sim_dir):
+        os.mkdir(sim_dir)
+
+    # set random seed with function of sim_id so we can recreate
+    np.random.seed(abs(hash(sim_id)) % 100000000)
+    gene = np.random.choice(genes)
+    data = load_gene_data(gene)
+    M, N = data.X.shape
+
+    # sample causal snps
+    causal_snps = np.random.choice(N, total_causal_snps)
+    true_effects = np.zeros((num_tissues, total_causal_snps))
+
+    for t in range(num_tissues):
+        # select causal_per_tissue causal snps to use in tissue t
+        causal_in_t = np.random.choice(
+            total_causal_snps, causal_per_tissue, replace=False)
+        true_effects[t, causal_in_t] = np.random.normal(size=causal_in_t.size)
+
+    tissue_variance = np.array([
+        compute_sigma2(data.X[:, causal_snps], te, pve) for te in true_effects
+    ])
+
+    #simulate expression
+    expression = (true_effects @ data.X[:, causal_snps].T) + \
+        np.random.normal(size=(num_tissues, M)) * np.sqrt(tissue_variance)[:, None]
+    expression = pd.DataFrame(expression - expression.mean(1)[:, None])
+
+    summary_stats = [linregress(y, data.X) for y in expression.values]
+    B = pd.DataFrame(np.stack([x[0] for x in summary_stats]), columns=data.common_snps)
+    V = pd.DataFrame(np.stack([x[1] for x in summary_stats]), columns=data.common_snps)
+    S = pd.DataFrame(np.stack([np.sqrt(x[2]) for x in summary_stats]), columns=data.common_snps)
+
+    regen = {
+        'causal_per_tissue': causal_per_tissue,
+        'total_causal_snps': total_causal_snps,
+        'num_tissues': num_tissues,
+        'pve': pve,
+        'sim_id': sim_id
+    }
+    # json.dump(regen, open('{}/{}.sim.key'.format(sim_dir, sim_id), 'w'))
+    sim_params = {
+        'true_effects': true_effects,
+        'causal_snps': causal_snps,
+        'tisse_variance': tissue_variance
+    }
+    # pickle.dump(sim_params, open('{}/{}.sim.params'.format(sim_dir, sim_id), 'wb'))
+    return SimpleNamespace(**{
+        'B': B, 'S': S, 'V': V,
+        'expression': expression,
+        'genotype_1kG': data.genotype_1kG,
+        'genotype': data.genotype_gtex,
+        'X': data.X, 'X1kG': data.X1kG, 'common_snps': data.common_snps,
+        'covariates': None, 'gene': data.gene, 'sim_id': sim_id, 'id': sim_id,
+        'true_effects': true_effects,
+        'causal_snps': causal_snps, 'tissue_variance': tissue_variance,
+        'causal_per_tissue': causal_per_tissue,
+        'total_causal_snps': total_causal_snps,
+        'num_tissues': num_tissues, 'pve': pve
+    })
+
 
 def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False, flip=False):
     # load expression
@@ -360,6 +518,7 @@ def compute_records_css(model):
         'snp_subset': mask
     }
     model.records = records
+
 
 def strip_and_dump(model, path, save_data=False):
     """
@@ -582,6 +741,7 @@ def active_kl(m1, m2):
         for k1 in range(m1.dims['K'])] for k2 in range(m2.dims['K'])])
     return kls
 
+
 def _active_overlap(a, b):
     """
     active_in_both / active_in_either
@@ -594,6 +754,7 @@ def _active_overlap(a, b):
     if active_in_either > 0:
         return active_in_both / active_in_either
     return 0
+
 
 def active_overlap(m1, m2):
     """
@@ -614,6 +775,7 @@ def active_overlap(m1, m2):
     else:
         return 0
 
+
 def active_overlap_heatmap(m1, m2):
     a1 = m1.records['active']
     if not np.any(a1):
@@ -631,6 +793,7 @@ def active_overlap_heatmap(m1, m2):
     plt.title('Component Activity Overlap')
     plt.xlabel(m2.name)
     plt.ylabel(m1.name)
+
 
 def active_kl_heatmap(m1, m2):
     a1 = m1.records['active']
@@ -659,4 +822,5 @@ def comparison_heatmaps(m1, m2, L):
     kl_heatmap(m1, m2)
     plt.sca(ax[2])
     average_r2_heatmap(m1, m2, L)
+
 
