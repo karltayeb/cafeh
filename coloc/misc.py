@@ -6,7 +6,7 @@ import seaborn as sns
 import json
 from .kls import categorical_kl
 
-gc = pd.read_csv('../../output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
+gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
 gc.set_index('gene', inplace=True)
 get_chromosome = lambda gene: gc.loc[gene].chromosome
 
