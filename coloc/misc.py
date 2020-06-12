@@ -587,6 +587,8 @@ def _active_overlap(a, b):
     active_in_both / active_in_either
     return 0 if none active
     """ 
+    a = a > 0.5
+    b = b > 0.5
     active_in_both = (a & b).sum()
     active_in_either = (a | b).sum()
     if active_in_either > 0:
