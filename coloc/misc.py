@@ -53,14 +53,6 @@ def get_common_snps(gene):
     return table[table.has_test & table.in_1kG].rsid.values
 
 
-def cov2corr(X):
-    """
-    scale covariance matrix to correlaton matrix
-    """
-    diag = np.sqrt(np.diag(X))
-    return (1/diag[:, None]) * X * (1/diag[None])
-
-
 def load(model_path):
     model = pickle.load(open(model_path, 'rb'))
     rehydrate_model(model)
@@ -639,11 +631,11 @@ def kl_components(m1, m2):
     return kls
 
 
-def kl_heatmap(m1, m2):
-    a1 = m1.records['active']
+def kl_heatmap(m1, m2, thresh=0.5):
+    a1 = m1.active.max(0) > thresh
     if not np.any(a1):
         a1[0] = True
-    a2 = m2.records['active']
+    a2 = m2.active.max(0) > thresh
     if not np.any(a2):
         a2[0] = True
     Q = kl_components(m1, m2).T
@@ -671,10 +663,10 @@ def average_ld(m1, m2, L):
 
 
 def average_ld_heatmap(m1, m2, L):
-    a1 = m1.records['active']
+    a1 = m1.active.max(0) > 0.5
     if not np.any(a1):
         a1[0] = True
-    a2 = m2.records['active']
+    a2 = m2.active.max(0) > 0.5
     if not np.any(a2):
         a2[0] = True
 
@@ -700,10 +692,10 @@ def average_r2(m1, m2, L):
 
 
 def average_r2_heatmap(m1, m2, L):
-    a1 = m1.records['active']
+    a1 = m1.active.max(0) > 0.5
     if not np.any(a1):
         a1[0] = True
-    a2 = m2.records['active']
+    a2 = m2.active.max(0) > 0.5
     if not np.any(a2):
         a2[0] = True
 
@@ -765,10 +757,10 @@ def active_overlap(m1, m2):
 
 
 def active_overlap_heatmap(m1, m2):
-    a1 = m1.records['active']
+    a1 = m1.active.max(0) > 0.5
     if not np.any(a1):
         a1[0] = True
-    a2 = m2.records['active']
+    a2 = m2.active.max(0) > 0.5
     if not np.any(a2):
         a2[0] = True
     Q = active_overlap(m1, m2).T
@@ -783,11 +775,11 @@ def active_overlap_heatmap(m1, m2):
     plt.ylabel(m1.name)
 
 
-def active_kl_heatmap(m1, m2):
-    a1 = m1.records['active']
+def active_kl_heatmap(m1, m2, thresh=0.5):
+    a1 = m1.active.max(0) > thresh
     if not np.any(a1):
         a1[0] = True
-    a2 = m2.records['active']
+    a2 = m2.active.max(0) > thresh
     if not np.any(a2):
         a2[0] = True
     Q = active_kl(m1, m2).T
