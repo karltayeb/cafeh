@@ -37,7 +37,7 @@ def sim_from_model(gene, model, thin=False, sim_id=None):
 
     #simulate expression
     expression = (true_effects @ data.X[:, causal_snps].T) + \
-        np.random.normal(size=(data.expression.shape)) * np.sqrt(tissue_variance)[:, None]
+        np.random.normal(size=(model.dims['T'], model.dims['M'])) * np.sqrt(tissue_variance)[:, None]
     expression = pd.DataFrame(expression - expression.mean(1)[:, None])
 
     summary_stats = [linregress(y, data.X) for y in expression.values]
