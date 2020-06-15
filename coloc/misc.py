@@ -15,11 +15,11 @@ gc.set_index('gene', inplace=True)
 get_chromosome = lambda gene: gc.loc[gene].chromosome
 
 def make_snp_format_table(gene):
-    ep = '../../output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
-    gp = '../../output/GTEx/{}/{}/{}.raw'.format(get_chromosome(gene), gene, gene)
-    gp1kG = '../../output/GTEx/{}/{}/{}.1kG.raw'.format(get_chromosome(gene), gene, gene)
-    ap = '../../output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
-    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
+    ep = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
+    gp = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.raw'.format(get_chromosome(gene), gene, gene)
+    gp1kG = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.1kG.raw'.format(get_chromosome(gene), gene, gene)
+    ap = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
+    v2rp = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
 
     with open(gp, 'r') as f:
@@ -72,8 +72,8 @@ flip = lambda x: (x-1)*-1 + 1
 
 
 def load_gtex_genotype(gene):
-    gp = '../../output/GTEx/{}/{}/{}.raw'.format(get_chromosome(gene), gene, gene)
-    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
+    gp = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.raw'.format(get_chromosome(gene), gene, gene)
+    v2rp = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
     table = make_snp_format_table(gene)
 
@@ -97,8 +97,8 @@ def load_gtex_genotype(gene):
 
 
 def load_1kG_genotype(gene):
-    gp1kG = '../../output/GTEx/{}/{}/{}.1kG.raw'.format(get_chromosome(gene), gene, gene)
-    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
+    gp1kG = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.1kG.raw'.format(get_chromosome(gene), gene, gene)
+    v2rp = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
 
     table = make_snp_format_table(gene)
@@ -118,8 +118,8 @@ def load_1kG_genotype(gene):
 
 
 def load_gtex_summary_stats(gene):
-    ap = '../../output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
-    v2rp = '../../output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
+    ap = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.associations'.format(get_chromosome(gene), gene, gene)
+    v2rp = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.snp2rsid.json'.format(get_chromosome(gene), gene, gene)
     v2r = json.load(open(v2rp, 'r'))
 
     associations = pd.read_csv(ap)
@@ -160,7 +160,7 @@ def load_gtex_expression(gene):
     load expression, drop unexpressed individuals
     """
     # load expression
-    ep = '../../output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
+    ep = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
     gene_expression = pd.read_csv(ep, sep='\t', index_col=0)
     # drop individuals that do not have recorded expression
     gene_expression = gene_expression.loc[:, ~np.all(np.isnan(gene_expression), 0)]
@@ -218,6 +218,7 @@ def load_gene_data(gene, thin=False):
     if thin:
         d = int(common_snps.size / 1000)
         common_snps = common_snps[::d]
+        common_snps = common_snps[:1000]
 
     genotype = genotype.loc[:, common_snps]
     genotype1kG = genotype1kG.loc[:, common_snps]
