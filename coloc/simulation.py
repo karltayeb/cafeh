@@ -48,7 +48,7 @@ def sim_expression(data, sim_id, n_tissues=1, n_causal=0, pve=0, active=None, ca
         'tissue_variance': tissue_variance
     })
 
-                
+          
 def sim_expression_from_model(data, model, sim_id):
     """
     Use the parameters of a fit cafeh model to simulate expression
@@ -78,9 +78,9 @@ def load_sim_from_model_data(gene, sim_spec):
     sim_id: pass sim id to regenerate an old simulation
     """
     # load model and look up sim_id from sim_spec
-    gss = load(sim_spec.loc[sim_spec.gene==gene].source_model_path.values[0])
-    sim_id = sim_spec.loc[sim_spec.gene==gene].sim_id.values[0]
-    
+    gss = load(sim_spec.loc[sim_spec.gene == gene].source_model_path.values[0])
+    sim_id = sim_spec.loc[sim_spec.gene == gene].sim_id.values[0]
+
     # load data
     data = load_gene_data(gene, thin=True)
 
@@ -92,9 +92,7 @@ def load_sim_from_model_data(gene, sim_spec):
     B = pd.DataFrame(np.stack([x[0] for x in summary_stats]), columns=data.common_snps)
     V = pd.DataFrame(np.stack([x[1] for x in summary_stats]), columns=data.common_snps)
     S = pd.DataFrame(np.stack([np.sqrt(x[2]) for x in summary_stats]), columns=data.common_snps)
-    
-    # put everything in one namespace
-    
+
     # pickle.dump(sim_params, open('{}/{}.sim.params'.format(sim_dir, sim_id), 'wb'))
     return SimpleNamespace(**{
         'B': B, 'S': S, 'V': V,
@@ -105,5 +103,4 @@ def load_sim_from_model_data(gene, sim_spec):
         'covariates': None, 'gene': data.gene,
         'true_effects': se.true_effects,
         'causal_snps': se.causal_snps, 'tissue_variance': se.tissue_variance,
-        'sim_id': sim_id, 'id': sim_id
-    })
+        'sim_id': sim_id, 'id': sim_id}), se
