@@ -1,7 +1,7 @@
 import numpy as np
 from sklearn import covariance
 import pickle
-from misc import center_mean_impute
+from .misc import center_mean_impute
 
 superpop2samples = pickle.load('/work-zfs/abattle4/karl/cosie_analysis/output/superpop2samples_1kG')
 def cov2corr(X):

@@ -10,7 +10,6 @@ import os
 import random
 import string
 from copy import deepcopy
-from covariance import *
 
 gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
 gc.set_index('gene', inplace=True)
@@ -243,36 +242,6 @@ def load_gene_data(gene, thin=False):
         'B': B, 'S': S, 'V':V, 'n':n, 'common_snps': common_snps,
         'gene': gene, 'id': gene, 'covariates': covariates
     })
-
-
-def smooth_betas(data, ld, epsilon=1.0):
-    """
-    return a copy of data with smoothed effect sizes
-    beta_sooth = SRS(SRS + epsilonS^2)^{-1} beta
-    """
-    ld_functions = {
-        'sample': sample_ld,
-        'eur_ld': eur_ld,
-        'asn_ld': asn_ld,
-        'afr_ld': afr_ld,
-        'reference': refernce_ld,
-        'z': z_ld,
-        'lw_sample': ledoit_wolf_sample_ld,
-        'lw_refence': ledoit_wolf_reference_ld,
-        'lw_z': ledoit_wolf_z_ld,
-        'ref_z': ref_z_ld,
-        'z3': z3_ld
-    }
-    Bs = []
-    R = ld_functions['ld'](data)
-    for i in range(data.S.shape[0]):
-        S = np.diag(data.S.iloc[i].values)
-        B = data.B.iloc[i].values
-        SRS = S @ R @ S
-        Bs.append(SRS @ np.linalg.solve(SRS + epsilon * S**2, B))
-    data_smooth = deepcopy(data)
-    data_smooth.B = Bs
-    return data_smooth
 
 def compute_sigma2(X, true_effect, pve):
     var = np.var(true_effect @ X.T)
