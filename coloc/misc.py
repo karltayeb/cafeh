@@ -10,7 +10,7 @@ import os
 import random
 import string
 from copy import deepcopy
-from .covariance import *
+from covariance import *
 
 gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
 gc.set_index('gene', inplace=True)
