@@ -9,6 +9,7 @@ from types import SimpleNamespace
 import os
 import random
 import string
+from copy import deepcopy
 
 gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
 gc.set_index('gene', inplace=True)
@@ -243,10 +244,21 @@ def load_gene_data(gene, thin=False):
     })
 
 
-def randomString(stringLength=8):
-    letters = string.ascii_lowercase
-    return ''.join(random.choice(letters) for i in range(stringLength))
-
+def smooth_betas(data, ld, epsilon=1.0):
+    """
+    return a copy of data with smoothed effect sizes
+    beta_sooth = SRS(SRS + epsilonS^2)^{-1} beta
+    """
+    Bs = []
+    R = getattr(covariance, ld)(data)
+    for i in range(data.S.shape[0]):
+        S = np.diag(data.S.iloc[i].values)
+        B = data.B.iloc[i].values
+        SRS = S @ R @ S
+        Bs.append(SRS @ np.linalg.solve(SRS + epsilon * S**2, B))
+    data_smooth = deepcopy(data)
+    data_smooth.B = Bs
+    return data_smooth
 
 def compute_sigma2(X, true_effect, pve):
     var = np.var(true_effect @ X.T)
