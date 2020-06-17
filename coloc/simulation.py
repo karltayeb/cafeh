@@ -88,7 +88,7 @@ def load_sim_from_model_data(gene, sim_spec):
     if not os.path.isfile(spec.sim_path):
         se = sim_expression_from_model(data, gss, spec.sim_id, spec.seed)
         print('saving simulated expression to: {}'.format(spec.sim_path))
-        pickle.dump(open(spec.sim_path, 'wb'))
+        pickle.dump(se, open(spec.sim_path, 'wb'))
     else:
         print('loading simulated expression to: {}'.format(spec.sim_path))
         se = pickle.load(open(spec.sim_path, 'rb'))
