@@ -15,7 +15,7 @@ def randomString(stringLength=8):
     return ''.join(random.choice(letters) for i in range(stringLength))
 
 
-def sim_expression(data, sim_id, n_tissues=1, n_causal=0, pve=0, active=None, causal_snps=None, true_effects=None, tissue_variance=None):
+def sim_expression(data, n_tissues=1, n_causal=0, pve=0, active=None, causal_snps=None, true_effects=None, tissue_variance=None):
     """
     generic function for simulating expression
     returns expression, causal_snps, true effects and tissue variance
@@ -25,7 +25,6 @@ def sim_expression(data, sim_id, n_tissues=1, n_causal=0, pve=0, active=None, ca
     """
     n_samples, n_snps = data.X.shape
     # set random seed with function of sim_id so we can recreate
-    np.random.seed(abs(hash(sim_id)) % 100000000)
     if active is None:
         active = 0  # sim actve
     if causal_snps is None:
@@ -40,7 +39,7 @@ def sim_expression(data, sim_id, n_tissues=1, n_causal=0, pve=0, active=None, ca
     expression = (true_effects @ data.X[:, causal_snps].T) + \
         np.random.normal(size=(n_tissues, n_samples)) * np.sqrt(tissue_variance)[:, None]
     expression = pd.DataFrame(expression - expression.mean(1)[:, None])
-    
+
     return SimpleNamespace(**{
         'expression': expression,
         'causal_snps': causal_snps,
@@ -48,8 +47,7 @@ def sim_expression(data, sim_id, n_tissues=1, n_causal=0, pve=0, active=None, ca
         'tissue_variance': tissue_variance
     })
 
-          
-def sim_expression_from_model(data, model, sim_id):
+def sim_expression_from_model(data, model, sim_id, seed):
     """
     Use the parameters of a fit cafeh model to simulate expression
     gene: Use genotype in a 1mb window of tss of gene
@@ -61,8 +59,10 @@ def sim_expression_from_model(data, model, sim_id):
     active = model.active.max(0) > 0.5
     active[10:] = False
 
+    # random seed for reproducibility
+    np.random.seed(seed)
     return sim_expression(
-        data, sim_id,
+        data,
         n_tissues=data.expression.shape[0],
         n_causal=active.sum(),
         active=(model.active > 0.5)[:, active],
@@ -78,16 +78,23 @@ def load_sim_from_model_data(gene, sim_spec):
     sim_id: pass sim id to regenerate an old simulation
     """
     # load model and look up sim_id from sim_spec
-    gss = load(sim_spec.loc[sim_spec.gene == gene].source_model_path.values[0])
-    sim_id = sim_spec.loc[sim_spec.gene == gene].sim_id.values[0]
+    spec = sim_spec[sim_spec.gene == gene].iloc[0]
+    gss = load(spec.source_model_path)
 
     # load data
     data = load_gene_data(gene, thin=True)
 
     # simulate expression
-    se = sim_expression_from_model(data, gss, sim_id)
+    if not os.path.isfile(spec.sim_path):
+        se = sim_expression_from_model(data, gss, spec.sim_id, spec.seed)
+        print('saving simulated expression to: {}'.format(spec.sim_path))
+        pickle.dump(spec.sim_path)
+    else:
+        print('loading simulated expression to: {}'.format(spec.sim_path))
+        se = pickle.load(open(spec.sim_path, 'rb'))
 
     # generate summary stats
+    print('generating summary stats')
     summary_stats = [linregress(y, data.X) for y in se.expression.values]
     B = pd.DataFrame(np.stack([x[0] for x in summary_stats]), columns=data.common_snps)
     V = pd.DataFrame(np.stack([x[1] for x in summary_stats]), columns=data.common_snps)
@@ -103,4 +110,4 @@ def load_sim_from_model_data(gene, sim_spec):
         'covariates': None, 'gene': data.gene,
         'true_effects': se.true_effects,
         'causal_snps': se.causal_snps, 'tissue_variance': se.tissue_variance,
-        'sim_id': sim_id, 'id': sim_id}), se
+        'sim_id': spec.sim_id, 'id': spec.sim_id})
