@@ -193,7 +193,7 @@ def load_sim_data(spec):
     if not os.path.isfile(spec.sim_path):
         se = sim_method(data, spec)
         print('saving simulated expression to: {}'.format(spec.sim_path))
-        #pickle.dump(se, open(spec.sim_path, 'wb'))
+        pickle.dump(se, open(spec.sim_path, 'wb'))
     else:
         print('loading simulated expression from: {}'.format(spec.sim_path))
         se = pickle.load(open(spec.sim_path, 'rb'))
