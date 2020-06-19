@@ -8,7 +8,7 @@ from types import SimpleNamespace
 import os
 import random
 import string
-from .misc import load_gene_data, linregress, load, compute_sigma2, center_mean_impute
+from .misc import *
 
 def randomString(stringLength=8):
     letters = string.ascii_lowercase
