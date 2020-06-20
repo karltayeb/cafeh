@@ -115,7 +115,7 @@ class IndependentFactorSER:
         """
         computed expected effect size E[zw] [T, N]
         """
-        return np.log(self.prior_activity) - np.log(1 - self.prior_activity)
+        return np.log(self.prior_activity + 1e-10) - np.log(1 - self.prior_activity + 1e-10)
 
     @property
     def expected_effects(self):
