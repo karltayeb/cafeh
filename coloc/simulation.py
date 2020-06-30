@@ -215,7 +215,7 @@ def load_sim_data(spec):
         sim_method = simulate_n_causal_variants
     if spec.sim_method == 'sim_from_model':
         sim_method = sim_expression_from_model
-    if spec.sim_method == 'sim_max_n_causal_variants':
+    if spec.sim_method == 'max_n_causal_variants':
         sim_method = simulate_max_n_causal_variants
     # simulate expression
     if not os.path.isfile(spec.sim_path):
