@@ -100,6 +100,33 @@ def simulate_n_causal_variants(data, spec):
     return sim_expression(
         data, active=active, true_effects=true_effects, pve=pve)
 
+
+def simulate_max_n_causal_variants(data, spec):
+    """
+    simulation with fixed number of causal variants per tissue
+    """
+    n_causal = spec.n_causal
+    n_tissues = spec.n_tissues
+    max_causal_per_tissue = spec.max_n_causal
+    pve = spec.pve
+
+    print('generating data')
+    print(spec.to_dict())
+    causal_snps = np.random.choice(data.common_snps.size, n_causal)
+    true_effects = []
+    for _ in range(n_tissues):
+        causal_in_tissue = np.random.choice(max_causal_per_tissue)
+        causal_in_tissue = np.random.choice(n_causal, causal_in_tissue, replace=False)
+        effects = np.zeros(n_causal)
+        effects[causal_in_tissue] = np.random.normal(size=causal_in_tissue.size)
+        true_effects.append(effects)
+
+    true_effects = np.array(true_effects)
+    return sim_expression(
+        data, pve=pve, n_causal=n_causal,
+        causal_snps=causal_snps, true_effects=true_effects)
+
+
 def sim_expression_from_model(data, spec):
     """
     Use the parameters of a fit cafeh model to simulate expression
@@ -188,7 +215,8 @@ def load_sim_data(spec):
         sim_method = simulate_n_causal_variants
     if spec.sim_method == 'sim_from_model':
         sim_method = sim_expression_from_model
-
+    if spec.sim_method == 'sim_max_n_causal_variants':
+        sim_method = simulate_max_n_causal_variants
     # simulate expression
     if not os.path.isfile(spec.sim_path):
         se = sim_method(data, spec)
