@@ -11,9 +11,10 @@ import random
 import string
 from copy import deepcopy
 
-gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
-gc.set_index('gene', inplace=True)
-get_chromosome = lambda gene: gc.loc[gene].chromosome
+def get_chromosome(gene):
+    gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
+    gc.set_index('gene', inplace=True)
+    return gc.loc[gene].chromosome
 
 def make_snp_format_table(gene):
     ep = '/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/{}/{}/{}.expression'.format(get_chromosome(gene), gene, gene)
@@ -28,7 +29,7 @@ def make_snp_format_table(gene):
 
     with open(gp1kG, 'r') as f:
         rsids = f.readline().strip().split()[6:]
-        
+
     summary_stat_snps = np.unique(pd.read_csv(ap, sep=',', usecols=[3]).variant_id)
     summary_stat_snps = {snp: True for snp in summary_stat_snps}
     vid_codes = {'_'.join(x.split('_')[:-1]): x.split('_')[-1] for x in snps}
@@ -197,7 +198,6 @@ def center_mean_impute(genotype):
         X = X.fillna(0)
         return X
 
-
 def load_gene_data(gene, thin=False):
     # Load GTEx and 1kG genotype
     # flip genotype encoding to be consistent with GTEx associations
@@ -258,68 +258,6 @@ def linregress(y, X):
     var = np.var(y[:, None] - betas * X, 0) / diag
     s2 = betas**2 / y.size + var
     return betas, var, s2
-
-
-def make_simulation(causal_per_tissue, total_causal_snps, num_tissues, pve, sim_id=None):
-    """
-    genotype is genotype
-    causal_per_tissue is the number of causal variants per tissue
-    total_causal_snps is the total number of causal variants
-    num_tissues is the number of tissues
-    pve is the percent variance explained by genotype
-    """
-
-    genes = [x.split('/')[-2] for x in np.loadtxt(
-        '/work-zfs/abattle4/karl/cosie_analysis/output/sim/ld/1kgenes.txt', dtype=str)]
-
-    if sim_id is None:
-        sim_id = randomString(5)
-
-    # set random seed with function of sim_id so we can recreate
-    np.random.seed(abs(hash(sim_id)) % 100000000)
-    gene = np.random.choice(genes)
-    data = load_gene_data(gene, thin=True)
-    M, N = data.X.shape
-
-    # sample causal snps
-    causal_snps = np.random.choice(N, total_causal_snps)
-    true_effects = np.zeros((num_tissues, total_causal_snps))
-
-    for t in range(num_tissues):
-        # select causal_per_tissue causal snps to use in tissue t
-        causal_in_t = np.random.choice(
-            total_causal_snps, causal_per_tissue, replace=False)
-        true_effects[t, causal_in_t] = np.random.normal(size=causal_in_t.size)
-
-    tissue_variance = np.array([
-        compute_sigma2(data.X[:, causal_snps], te, pve) for te in true_effects
-    ])
-
-    #simulate expression
-    expression = (true_effects @ data.X[:, causal_snps].T) + \
-        np.random.normal(size=(num_tissues, M)) * np.sqrt(tissue_variance)[:, None]
-    expression = pd.DataFrame(expression - expression.mean(1)[:, None])
-
-    summary_stats = [linregress(y, data.X) for y in expression.values]
-    B = pd.DataFrame(np.stack([x[0] for x in summary_stats]), columns=data.common_snps)
-    V = pd.DataFrame(np.stack([x[1] for x in summary_stats]), columns=data.common_snps)
-    S = pd.DataFrame(np.stack([np.sqrt(x[2]) for x in summary_stats]), columns=data.common_snps)
-
-    # pickle.dump(sim_params, open('{}/{}.sim.params'.format(sim_dir, sim_id), 'wb'))
-    return SimpleNamespace(**{
-        'B': B, 'S': S, 'V': V,
-        'expression': expression,
-        'genotype_1kG': data.genotype_1kG,
-        'genotype': data.genotype_gtex,
-        'X': data.X, 'X1kG': data.X1kG, 'common_snps': data.common_snps,
-        'covariates': None, 'gene': data.gene,
-        'true_effects': true_effects,
-        'causal_snps': causal_snps, 'tissue_variance': tissue_variance,
-        'causal_per_tissue': causal_per_tissue,
-        'total_causal_snps': total_causal_snps,
-        'num_tissues': num_tissues, 'pve': pve,
-        'sim_id': sim_id, 'id': sim_id
-    })
 
 
 def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=False, flip=False):
@@ -798,5 +736,3 @@ def comparison_heatmaps(m1, m2, L):
     kl_heatmap(m1, m2)
     plt.sca(ax[2])
     average_r2_heatmap(m1, m2, L)
-
-

@@ -241,38 +241,6 @@ class IndependentFactorSER:
             ERSS[t] += m2pid.sum() + np.sum(mpX.sum(0)**2) - np.sum(mpX**2)
         return ERSS
 
-
-    def _compute_ERSS_old(self, k=None):
-        """
-        compute ERSS using XY and XX
-        """
-        ERSS = np.zeros(self.dims['T'])
-
-        prediction = self.compute_prediction(k, use_covariates=False)
-        first_moments = np.array([
-            self.compute_first_moment(l)
-            for l in range(self.dims['K']) if l != k
-        ])
-
-        covariate_residual = self.Y \
-            - self.compute_covariate_prediction()
-        for t in range(self.dims['T']):
-            mask = self._get_mask(t)
-            diag = self._get_diag(t)
-            Ew2 = (self.weight_means[t] ** 2 + self.weight_vars[t])
-            active = self.active[t][:, None]
-            pt1 = np.sum(Ew2 * self.pi * diag * active)
-            if k is not None:
-                pt1 -= np.sum(self.compute_Ew2(k)[t] * self.pi[k] * diag)
-
-            pt2 = np.inner(prediction[t, mask], prediction[t, mask])
-            pt3 = np.einsum('ij,ij->i', first_moments[:, t, mask], first_moments[:, t, mask]).sum()
-
-            ERSS[t] = np.inner(covariate_residual[t, mask], covariate_residual[t, mask])
-            ERSS[t] += -2 * np.inner(covariate_residual[t, mask], prediction[t, mask])
-            ERSS[t] += pt1 + np.sum(pt2) - pt3
-        return ERSS
-
     def _update_covariate_weights_tissue(self, residual, tissue):
         """
         update covariates
@@ -312,10 +280,8 @@ class IndependentFactorSER:
         Ew2 = Ew2 * active + (1 / E_alpha) * (1 - active)
         entropy = self.compute_Hw(k)
         entropy = entropy * active + normal_entropy(1 / E_alpha) * (1 - active)
-        
-        lik = (
-            - 0.5 * E_alpha * Ew2
-        )  # [T, N]        
+
+        lik = (- 0.5 * E_alpha * Ew2)  # [T, N]
         pi_k = (tmp1 + lik + entropy)
         pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
@@ -355,7 +321,7 @@ class IndependentFactorSER:
         self.weight_precision_a[:, k] = alpha
         self.weight_precision_b[:, k] = beta
 
-    def _update_weight_component(self, k, ARD=True, residual=None):
+    def _update_weight_component(self, k, residual=None):
         """
         update weights for a component
         """

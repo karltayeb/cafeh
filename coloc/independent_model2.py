@@ -162,7 +162,7 @@ class IndependentFactorSER:
         get diag(X^T X) for a given tissue
         differs for tissues because of missingness in Y
         """
-        if tissue not in self.precompute['diags']:
+        if tissue not in self.precompute['masks']:
             mask = self._get_mask(tissue)
             self.precompute['diags'][tissue] = \
                 np.einsum('ij, ij->i', self.X[:, mask], self.X[:, mask])
@@ -280,9 +280,8 @@ class IndependentFactorSER:
 
         # E[ln p(w | alpha)] + H(q(w))
         lik = (
-            -0.5 * np.log(2 * np.pi)
-            + 0.5 * E_ln_alpha[:, None]
-            - 0.5 * E_alpha[:, None] * E_w2)  # [T, N]
+            - 0.5 * E_alpha[:, None] * E_w2
+        )  # [T, N]
         entropy = self.compute_Hw(k)
         pi_k = (tmp1 + lik + entropy)
 
@@ -339,7 +338,8 @@ class IndependentFactorSER:
         precision = diag * self.expected_tissue_precision[:, None] \
             + self.expected_weight_precision[:, k][:, None]
         variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
+        mean = (variance * self.expected_tissue_precision[:, None]) \
+            * (r_k @ self.X.T)
 
         # update params
         self.weight_vars[:, k] = variance

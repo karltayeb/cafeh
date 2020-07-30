@@ -335,7 +335,7 @@ class IndependentFactorSER:
         precision = (diag @ self.pi[k])  * self.expected_tissue_precision \
             + self.expected_weight_precision[:, k]
         variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T)
+        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k @ self.X.T @ self.pi[k])
 
         # update params
         self.weight_vars[:, k] = variance

@@ -2,9 +2,10 @@ import numpy as np
 from scipy.stats import norm
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl, normal_entropy, gamma_kl
 import os, sys, pickle
-from .utils import np_cache_class, gamma_logpdf
+from .utils import np_cache_class, gamma_logpdf, centered_moment2natural, natural2centered_moment
 from functools import lru_cache
 import pandas as pd
+from scipy.special import digamma
 import time
 
 class CAFEH:
@@ -33,9 +34,10 @@ class CAFEH:
         self.prior_precision = np.ones((T, K))
         self.prior_pi = np.ones(N) / N
         self.prior_activity = np.ones(K) * 0.5
+        
         # initialize latent vars
-        self.weight_means = np.zeros((T, K, N))
-        self.weight_vars = np.ones((T, K, N))
+        self.weight_means = np.zeros((T, K))
+        self.weight_vars = np.ones((T, K))
         self.pi = np.ones((K, N)) / N
         self.active = np.ones((T, K))
 
@@ -48,7 +50,7 @@ class CAFEH:
         self.weight_precision_b = np.ones((T, K))
 
         self.c = 1e-10
-        self.d=1e-10
+        self.d = 1e-10
 
         # variational paramters for (beta distributed) variance proportions
         self.tissue_precision_a = np.ones(T)
@@ -57,7 +59,7 @@ class CAFEH:
         self.elbos = []
         self.tolerance = tolerance
         self.run_time = 0
-
+        self.step_size = 1.0
         self.precompute = {
             'Hw': {},
             'Ew2': {},
@@ -66,11 +68,6 @@ class CAFEH:
             'masks': {}
         }
         self.records = {}
-
-    @property
-    def LD(self):
-        residual = self.compute_residual
-        return 
 
     @property
     def expected_tissue_precision(self):
@@ -92,14 +89,14 @@ class CAFEH:
         """
         computed expected effect size E[zw] [T, N]
         """
-        return np.einsum('ijk,jk->ik', self.weight_means, self.pi)
-    
+        return np.einsum('tk,kn->tn', self.weight_means, self.pi)
+
     @property
     def expected_log_odds(self):
         """
         computed expected effect size E[zw] [T, N]
         """
-        return np.log(self.prior_activity) - np.log(1 - self.prior_activity)
+        return np.log(self.prior_activity + 1e-10) - np.log(1 - self.prior_activity + 1e-10)
 
     def compute_Hw(self, component):
         """
@@ -147,6 +144,7 @@ class CAFEH:
         """
         return np.diag(self.LD)
 
+
     def compute_first_moment(self, component):
         """
         compute E[S^{-1}LD zws] for a component
@@ -163,10 +161,9 @@ class CAFEH:
         compute first moment
         """
         pi = self.pi[component]
-        weight = self.weight_means[:, component]
-        active = self.active[:, component]
-        moment = []
-        mu = pi[None] * weight * active[:, None]
+        weight = self.weight_means[:, component][:, None]
+        active = self.active[:, component][:, None]
+        mu = pi[None] * weight * active
         m = (mu / self.S) @ self.LD * self.S
         return m
 
@@ -177,7 +174,7 @@ class CAFEH:
         pi = self.pi[component]
         active = self.active[:, component][:, None]
         sample = np.random.choice(a=pi.size, size=Q, p=pi)
-        weight = self.weight_means[:, component, sample]
+        weight = self.weight_means[:, component][:, None]
         mu = (weight * active) / self.S[:, sample]
         m = ((mu @ self.LD[sample]) * self.S) / Q
         return m
@@ -213,9 +210,9 @@ class CAFEH:
         return ERSS
 
     def _compute_ERSS_tissue(self, t):
-        diag = (self.S**-2)[t] # N
+        diag = (self.S**-2)[t] * np.diag(self.LD)  # N
         active = self.active[t][:, None]  # Kx1
-        mupi = (self.weight_means[t] * active) * self.pi
+        mupi = (self.weight_means[t][:, None] * active) * self.pi
 
         ERSS = self.compute_tissue_constant(t)
         ERSS += -2 * np.inner(self.B[t] * diag, mupi.sum(0))
@@ -225,22 +222,26 @@ class CAFEH:
     def _compute_quad_randomized(self, t, Q=1):
         sample = np.array([np.random.choice(
             self.pi[0].size, Q, p=self.pi[k]) for k in range(self.dims['K'])]).T
-        diag = self.S[t]**-2
+        diag = self.S[t]**-2 * np.diag(self.LD)
         active = self.active[t]
+        weight = self.weight_means[t]
+        var = self.weight_vars[t]
         total = []
         for s in sample:
-            beta_s = (active * self.weight_means[t, np.arange(self.dims['K']), s]) / self.S[t, s]
-            var_beta = (self.weight_vars[t, np.arange(self.dims['K']), s] * active)
+            beta_s = (active * weight) / self.S[t, s]
+            var_beta = (var * active)
             total.append((beta_s @ self.LD[s][:, s] @ beta_s)
                          + (diag[s] * var_beta).sum())
         return np.mean(total)
 
     def _compute_quad(self, t):
-        diag = (self.S**-2)[t] # N
+        diag = (self.S**-2)[t] * np.diag(self.LD)  # N
         active = self.active[t][:, None]  # Kx1
-        mupi = (self.weight_means[t] * active) * self.pi
+        weight = self.weight_means[t][:, None]
+        var = self.weight_vars[t][:, None]
+        mupi = (weight * active) * self.pi
 
-        Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
+        Ew2 = (weight**2 + var)  #KxN
         m2pid = np.sum(active * Ew2 * diag * self.pi)
         mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
         total = m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
@@ -250,7 +251,7 @@ class CAFEH:
         """
         update pi for a component
         """
-        diag = self.S**-2
+        diag = self.S**-2 * np.diag(self.LD)[None]
         if residual is None:
             r_k = self.compute_residual(k)
         else:
@@ -263,22 +264,23 @@ class CAFEH:
         active = self.active[:, k][:, None]
 
         # E[ln p(y | w, s, z, tau)]
-        tmp1 = -2 * r_k * self.weight_means[:, k] + Ew2
+        tmp1 = -2 * r_k * self.weight_means[:, k][:, None] + Ew2[:, None]
         tmp1 = -0.5 * self.expected_tissue_precision[:, None] \
             * tmp1 * diag * active
 
-        # E[ln p(w | alpha)] + H(q(w))
-        Ew2 = Ew2 * active + (1 / E_alpha) * (1 - active)
-        entropy = self.compute_Hw(k)
-        entropy = entropy * active + normal_entropy(1 / E_alpha) * (1 - active)
-        lik = (
-            - 0.5 * E_alpha * Ew2
-        )  # [T, N]        
-        pi_k = (tmp1 + lik + entropy)
-        pi_k = pi_k.sum(0)
+        pi_k = tmp1.sum(0)
         pi_k += np.log(self.prior_pi)
         pi_k = np.exp(pi_k - pi_k.max())
         pi_k = pi_k / pi_k.sum()
+
+        # stochastic variational update
+        if self.step_size < 1:
+            natural_old = np.log(self.pi[k]) - np.log(self.pi[k, -1] + 1e-10)
+            nautral_new = np.log(pi_k) - np.log(pi_k[-1] + 1e-10)
+            natural_updated = (1 - self.step_size) * natural_old \
+                + self.step_size * nautral_new
+            pi_k = np.exp(natural_updated - natural_updated.max())
+            pi_k = pi_k / pi_k.sum()
 
         # update parameters
         self.pi[k] = pi_k
@@ -306,11 +308,17 @@ class CAFEH:
         active = self.active[:, k]
         E_alpha = self.expected_weight_precision[:, k]
         Ew2 = self.compute_Ew2(k)
-        second_moment = Ew2 @ self.pi[k]
+        second_moment = Ew2 #s@ self.pi[k]
         second_moment = second_moment * active \
             + (1 / E_alpha) * (1 - active)
         alpha = self.a + 0.5
         beta = self.b + second_moment / 2
+
+        if self.step_size < 1:
+            alpha = (1 - self.step_size) * self.weight_precision_a[:, k] + \
+                self.step_size * alpha
+            beta = (1 - self.step_size) * self.weight_precision_b[:, k] + \
+                self.step_size * beta
         self.weight_precision_a[:, k] = alpha
         self.weight_precision_b[:, k] = beta
 
@@ -318,24 +326,32 @@ class CAFEH:
         """
         update weights for a component
         """
-        diag = self.S**-2
+        diag = self.S**-2 * np.diag(self.LD)[None]
+        d = diag @ self.pi[k]
+
         if residual is None:
             r_k = self.compute_residual(k)
         else:
             r_k = residual
 
-        precision = diag * self.expected_tissue_precision[:, None] \
-            + self.expected_weight_precision[:, k][:, None]
+        precision = d * self.expected_tissue_precision \
+            + self.expected_weight_precision[:, k]
         variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) \
-            * (r_k * diag)
 
-        """
-        precision = diag * self.expected_tissue_precision[:, None] \
-            + self.expected_weight_precision[:, k][:, None]
-        variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) * (r_k * diag)
-        """
+        mean = (variance * self.expected_tissue_precision) \
+            * ((r_k * diag) @ self.pi[k])
+
+
+        # stochastic optimization
+        if self.step_size < 1:
+            eta1_old, eta2_old = centered_moment2natural(self.weight_means[:, k], self.weight_vars[:, k])
+            eta1_new, eta2_new = centered_moment2natural(mean, variance)
+
+            eta1_updated = (1 - self.step_size) * eta1_old  +  self.step_size * eta1_new
+            eta2_updated = (1 - self.step_size) * eta2_old  +  self.step_size * eta2_new
+            mean, variance = natural2centered_moment(eta1_updated, eta2_updated)
+
+
         # update params
         self.weight_vars[:, k] = variance
         self.weight_means[:, k] = mean
@@ -359,40 +375,42 @@ class CAFEH:
         """
         update active
         """
-        diag = self.S**-2 # T x N
+        diag = self.S**-2 * np.diag(self.LD)[None] # T x N
+        d = diag @ self.pi[k]
+
         r_k = self.compute_residual(k)
-        p_k = self.pi[k][None] * self.weight_means[:, k]
+        p_k = self.pi[k][None] * self.weight_means[:, k][:, None]
         tmp1 = -2 * np.einsum('ij,ij->i', r_k * diag, p_k) \
-            + (self.compute_Ew2(k) * diag) @ self.pi[k]
+            + (self.compute_Ew2(k) * d)
         tmp1 = -0.5 * self.expected_tissue_precision * tmp1
 
         tmp2 = -0.5 * self.expected_weight_precision[:, k] \
-            * (self.compute_Ew2(k) @ self.pi[k]) \
-            + normal_entropy(self.weight_vars[:, k]) @ self.pi[k]
+            * self.compute_Ew2(k) \
+            + normal_entropy(self.weight_vars[:, k])
 
         a = tmp1 + tmp2
         b = -0.5 + normal_entropy(1 / self.expected_weight_precision[:, k])
+        active_k = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
+        
+        # stochastic variational update
+        if self.step_size < 1:
+            natural_old = np.log(1 - self.active[:, k] + 1e-10) - np.log(self.active[:, k] + 1e-10)
+            natural_new = b - a - self.expected_log_odds[k]
+
+            natural_updated = (1 - self.step_size) * natural_old \
+                + self.step_size * natural_new
+
+            active_k = 1 / (np.exp(natural_updated) + 1)
 
         # update params
-        self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
+        self.active[:, k] = active_k
+
 
         # pop precomputes
         self.precompute['first_moments'].pop(k, None)
         self.precompute['Hw'].pop(k, None)
         self.precompute['Ew2'].pop(k, None)
 
-    def update_tissue_variance(self, residual=None):
-        """
-        update tau, controls tissue specific variance
-        """
-        if residual is None:
-            residual = self.compute_residual()
-        ERSS = self._compute_ERSS()
-        self.tissue_precision_b = np.array([1 - (self._compute_quad_randomized[t] / self.sample_size[t])
-            for t in range(self.dims['T'])])
-        self.tissue_precision_a = np.ones(self.dims['T'])
-        self.tissue_precision_a = self.c + self.sample_size / 2
-        self.tissue_precision_b = self.d + ERSS / 2
 
     def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_pi=True, update_variance=True, update_active=True, ARD_weights=False):
         """
@@ -413,9 +431,6 @@ class CAFEH:
                     self._update_pi_component(l)
                 if update_active:
                     self._update_active_component(l)
-            # update variance parameters
-            if update_variance:
-                self.update_tissue_variance()
 
             # monitor convergence with ELBO
             self.elbos.append(self.compute_elbo())
@@ -452,13 +467,11 @@ class CAFEH:
                 + 0.5 * self.dims['N'] * E_ln_tau[tissue] \
                 - 0.5 * E_tau[tissue] * ERSS[tissue]
 
-        Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])])
-        Ew2 = np.einsum('jik,jk->ij', Ew2, self.pi)
+        Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])]).T
         Ew2 = Ew2 * self.active + (1 - self.active) / E_alpha
 
-        Hw = np.array([self.compute_Hw(k) for k in range(self.dims['K'])])
-        entropy = np.einsum('jik,jk->ij', Hw, self.pi)
-        entropy = entropy * self.active + \
+        Hw = np.array([self.compute_Hw(k) for k in range(self.dims['K'])]).T
+        entropy = Hw * self.active + \
             normal_entropy(1 / E_alpha) * (1 - self.active)
         lik = (
             - 0.5 * np.log(2 * np.pi)
@@ -485,6 +498,7 @@ class CAFEH:
         snps: integer index into snp_ids
         """
         return self.LD[snps][:, snps]
+
 
     def save(self, output_dir, model_name, save_data=False):
         """

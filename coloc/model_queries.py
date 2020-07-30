@@ -18,7 +18,7 @@ def get_expected_weights(self):
     if self.weight_means.ndim == 2:
         weights = self.weight_means * self.active
     else:
-        weights = np.einsum('ijk,kj->ij', self.weight_means, self.pi.T)
+        weights = np.einsum('ijk,kj->ij', self.weight_means * self.active[:, :, None], self.pi.T)
     return weights
 
 def get_top_snp_per_component(self):

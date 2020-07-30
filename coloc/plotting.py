@@ -151,15 +151,20 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
     plot inducing point posteriors, weight means, and probabilities
     """
     weights = self.get_expected_weights()
-    # make plot
+    active_components = self.active.max(0) > 0.5
+    """
     cs, pur = self.get_credible_sets()
+    active_components = np.array([k for k in range(self.dims['K']) if pur[k] >= thresh])
+    if active_components.size == 0:
+        active_components = np.array([0])
+    """
+
     fig, ax = plt.subplots(1, 3, figsize=(18, 4))
-    for k in np.arange(self.dims['K']):
-        if pur[k] > thresh: 
-            ax[2].scatter(
-                np.arange(self.dims['N'])[self.pi.T[:, k] > 2/self.dims['N']],
-                self.pi.T[:, k][self.pi.T[:, k] > 2/self.dims['N']],
-                alpha=0.5, label='k{}'.format(k))
+    for k in np.arange(self.dims['K'])[active_components]:
+        ax[2].scatter(
+            np.arange(self.dims['N'])[self.pi.T[:, k] > 2/self.dims['N']],
+            self.pi.T[:, k][self.pi.T[:, k] > 2/self.dims['N']],
+            alpha=0.5, label='k{}'.format(k))
     ax[2].scatter(np.arange(self.dims['N']), np.zeros(self.dims['N']), alpha=0.0)
     ax[2].set_title('pi')
     ax[2].set_xlabel('SNP')
@@ -167,9 +172,6 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
     ax[2].legend(bbox_to_anchor=(1.04,1), loc="upper left")
 
 
-    active_components = np.array([k for k in range(self.dims['K']) if pur[k] >= thresh])
-    if active_components.size == 0:
-        active_components = np.array([0])
     sns.heatmap(weights[:, active_components], annot=False, cmap='RdBu_r', ax=ax[1], yticklabels=[], center=0)
     ax[1].set_title('weights')
     ax[1].set_xlabel('component')

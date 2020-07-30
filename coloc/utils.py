@@ -75,3 +75,14 @@ def assign(model, param_dict):
     for key in model.__dict__:
         if key in param_dict:
             model.__dict__[key] = param_dict[key]
+
+
+def centered_moment2natural(mu, sigma2):
+    eta1 = mu/sigma2
+    eta2 = -1/(2 * sigma2)
+    return eta1, eta2
+
+def natural2centered_moment(eta1, eta2):
+    mu = -0.5 * eta1 / eta2
+    sigma2 = -1 / (2 * eta2)
+    return mu, sigma2
