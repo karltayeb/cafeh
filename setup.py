@@ -2,9 +2,9 @@
 
 from distutils.core import setup
 
-setup(name='coloc',
+setup(name='cafeh',
       version='1.0',
       description='Python Distribution Utilities',
       author='Karl Tayeb',
-      packages=['coloc'],
+      packages=['cafeh'],
      )
