@@ -9,7 +9,7 @@ def solve_cholesky(cholA, b):
 
 def make_problem(N, K, nonneg=False):
     """
-    make cvxpy problem that solves the weights for a given tissue
+    make cvxpy problem that solves the weights for a given study
     """
     weights_t = cvxpy.Variable(K)
 
@@ -60,7 +60,7 @@ def set_params(pi, beta_means, beta_vars, penalty, param_dict):
     param_dict['_penalty'].value = penalty
 
 
-def solve_w_tissue(Yt, param_dict, problem):
+def solve_w_study(Yt, param_dict, problem):
     param_dict['_data'].value= Yt
     problem.solve()
     return problem.variables()[0].value

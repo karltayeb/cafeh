@@ -4,12 +4,12 @@ from scipy import stats
 class SuSiE:
     def __init__(self, X, Y, K, prior_weight_variance, prior_slab_weights, pi_prior):
         """
-        Y [M] expresion for tissue, individual
+        Y [M] expresion for study, individual
         X [N x M] genotype for snp, individual
-            potentially [T x N x M] if tissue specific correction
+            potentially [T x N x M] if study specific correction
 
         prior_weight_variance [T, K]
-            prior variance for weight of (tissue, component) loading
+            prior variance for weight of (study, component) loading
         prior_slab_weights [K]
             prior probability of sapling from slab in component k
         pi_prior: prior for multinomial,

@@ -31,6 +31,7 @@ def get_component_activity(model, active_thresh=0.5, purity_thresh=0.7):
         [model.records['purity'][k] > purity_thresh for k in range(model.dims['K'])])
     return component_purity & component_activity
 
+
 def all_credible_snps(model, active_thresh=0.5, purity_thresh=0.7):
     active = get_component_activity(model)
     try:
@@ -41,6 +42,7 @@ def all_credible_snps(model, active_thresh=0.5, purity_thresh=0.7):
         )
     except Exception:
         return np.array([])
+
 
 def score_finemapping(model, sim, active_thresh=0.5, purity_thresh=0.7):
     credible_sets = model.records['credible_sets']
@@ -65,11 +67,13 @@ def score_finemapping(model, sim, active_thresh=0.5, purity_thresh=0.7):
     }
     return row
 
+
 p_coloc = lambda model, t1, t2: 1 - \
     np.exp(np.sum(np.log(1e-10 + 1 - model.active[t1] * model.active[t2])))
 p_coloc_in_active = lambda model, active, t1, t2: \
     1 - np.exp(np.sum(np.log(
         1e-10 + 1 - model.active[t1, active] * model.active[t2, active])))
+
 
 def score_coloc(model, sim, thresh=0.99):
     """
@@ -91,11 +95,12 @@ def score_coloc(model, sim, thresh=0.99):
         'false_negative': (true_coloc & ~model_coloc).sum()
     }
 
+
 def score_active_component_coloc(model, sim, thresh=0.99):
     """
     compute true/false positive/negative frequency
     from q(s) for all ACTIVE components
-    ACTIVE = (at least one tissue p > 0.5), (purity > 0.7)
+    ACTIVE = (at least one study p > 0.5), (purity > 0.7)
     """
     tril = np.tril_indices(model.dims['T'], k=-1)
     true_coloc = (sim.true_effects @ sim.true_effects.T != 0)[tril]
@@ -117,7 +122,7 @@ def score_causal_component_coloc(model, sim, thresh=0.99):
     """
     compute true/false positive/negative frequency
     from q(s) for all ACTIVE components with a causal SNP
-    ACTIVE = (at least one tissue p > 0.5), (purity > 0.7)
+    ACTIVE = (at least one study p > 0.5), (purity > 0.7)
     """
     tril = np.tril_indices(model.dims['T'], k=-1)
     true_coloc = (sim.true_effects @ sim.true_effects.T != 0)[tril]
@@ -142,12 +147,13 @@ def score_causal_component_coloc(model, sim, thresh=0.99):
         'false_negative': (true_coloc & ~model_coloc).sum()
     }
 
+
 def score_matched_component_coloc(model, sim, thresh=0.99):
     """
     compute true/false positive/negative frequency
     from q(s) for all ACTIVE components with a causal SNP
     MATCHED: compute true/false pos/neg frequency for each causal snp s
-    ACTIVE = (at least one tissue p > 0.5), (purity > 0.7)
+    ACTIVE = (at least one study p > 0.5), (purity > 0.7)
     """
     tril = np.tril_indices(model.dims['T'], k=-1)
 
@@ -167,7 +173,7 @@ def score_matched_component_coloc(model, sim, thresh=0.99):
         'false_negative': 0
     }
     for i, causal_snp in enumerate(causal_snps):
-        # tissues colocalizing with this causal snp
+        # studys colocalizing with this causal snp
         true_coloc = (np.outer(sim.true_effects[:, i], sim.true_effects[:, i]) != 0)[tril]
         # components that contain this causal snp
         model_coloc = np.concatenate([[
@@ -180,6 +186,7 @@ def score_matched_component_coloc(model, sim, thresh=0.99):
         r['false_negative'] += (true_coloc & ~model_coloc).sum()
     r['score'] = 'coloc_in_matched'
     return r
+
 
 def score_effect_size_error(model, sim):
     causal_snp_error = model.expected_effects[:, sim.causal_snps] - sim.true_effects
@@ -195,6 +202,7 @@ def score_effect_size_error(model, sim):
         'null_mean_squared_error': np.mean(non_causal_error**2)
     }
 
+
 score_functions = {
     'finemapping': score_finemapping,
     'coloc': score_coloc,
@@ -205,6 +213,11 @@ score_functions = {
 }
 
 def score(row):
+    """
+    score a simulation using score_functions
+    return a list of dictionaries, one for each row
+    can turn this into a dataframe with pd.DataFrame(score(row))
+    """
     try:
         sim = pickle.load(open(row[1].sim_path, 'rb'))
         model = load(row[1].model_path)
@@ -215,9 +228,13 @@ def score(row):
     except Exception:
         return []
 
+
 make_model_path = lambda x: '{}{}'.format(x.sim_path[:-14], x.model_key)
 
 def gen_sim_table(sim_spec, model_spec):
+    """
+    combine sim
+    """
     a = sim_spec.sim_id
     b = model_spec.model_key
     index = pd.MultiIndex.from_product([a, b], names = ['sim_id', 'model_key'])
@@ -225,3 +242,4 @@ def gen_sim_table(sim_spec, model_spec):
     sim_table = sim_table.merge(sim_spec, on='sim_id').merge(model_spec, on='model_key')
     sim_table.loc[:, 'model_path'] = sim_table.apply(make_model_path, axis=1)
     return sim_table
+

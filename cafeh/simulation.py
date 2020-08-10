@@ -10,6 +10,100 @@ import random
 import string
 from .misc import *
 
+def linregress(y, X):
+    """
+    y: m x t expression
+    X: m x n genotype
+    compute t x n pairwise linear regressions
+    reports slopes/standard errors
+    """
+    diag = np.einsum('ij,ij->i', X.T, X.T)
+    betas = y.T @ X / diag
+    if np.ndim(y) == 1:
+        var = np.var(y[:, None] - betas * X, 0) / diag
+    else:
+        var = np.array([np.var(y[:, t][:, None] - betas[t] * X, 0) / diag for t in range(y.shape[1])])
+    return betas, np.sqrt(var)
+
+class dotdict(dict):
+    """dot.notation access to dictionary attributes"""
+    __setattr__ = dict.__setitem__
+    __delattr__ = dict.__delitem__
+
+    def __getattr__(self, item):
+        try:
+            return self[item]
+        except KeyError:
+            raise AttributeError(item)
+
+    def __deepcopy__(self, memo):
+        return dotdict(copy.deepcopy(dict(self)))
+        
+class RegressionData(dotdict):
+    def __init__(self, X=None, Y=None, Z=None):
+        """
+        X = genotype  [M, N]
+        Y = expression [M, T]
+        Z = covariates [M, Q]
+        """
+        self.x_mean = self.y_mean = self.z_mean = None
+        self.X = X
+        self.Y = Y
+        self.Z = Z
+        self.xcorr = None
+
+    def get_summary_stats(self):
+        """
+        compute pairwise summary stats
+        """
+        if self.Z is not None:
+            self.remove_covariates()
+        #self.center_data()
+        self.beta, self.se = linregress(self.Y, self.X)
+
+    def get_cafeh_data(self):
+        """
+        shape data for CAFEHS
+        """
+        return {
+            'LD': np.corrcoef(self.X, rowvar=False),
+            'B': self.beta,
+            'S': np.sqrt((self.beta**2 / self.X.shape[0]) + self.se**2)
+        }
+
+    def get_cafehg_data(self):
+        """
+        shape data for CAFEHG
+        """
+        return {
+            'X': self.X,
+            'Y': self.Y
+        }
+
+    def remove_covariates(self):
+        """
+        get residual of Y ~ Z
+        """
+        if self.Z is not None:
+            self.Y -= self.Z @ (np.linalg.inv(self.Z.T @ self.Z) @ self.Z.T @ self.Y)
+            self.Z = None
+
+    def center_data(self):
+        """
+        center all data
+        """
+        # for np.array: np.mean(Z, axis=0, keepdims=True)
+        # for np.matrix, no keepdims argument
+        if self.X is not None and self.x_mean is None:
+            self.x_mean = np.mean(self.X, axis=0)
+            self.X -= self.x_mean
+        if self.Y is not None and self.y_mean is None:
+            self.y_mean = np.mean(self.Y, axis=0)
+            self.Y -= self.y_mean
+        if self.Z is not None and self.z_mean is None:
+            self.z_mean = np.mean(self.Z, axis=0)
+            self.Z -= self.z_mean
+
 def randomString(stringLength=8):
     letters = string.ascii_lowercase
     return ''.join(random.choice(letters) for i in range(stringLength))
@@ -40,11 +134,10 @@ def thin(data):
     })
 
 
-def sim_expression(data, n_tissues=1, n_causal=None, pve=0.1,
-                   active=None, causal_snps=None, true_effects=None, tissue_variance=None):
+def sim_expression(data, n_studys=1, n_causal=None, pve=0.1, active=None, causal_snps=None, true_effects=None, study_variance=None):
     """
     generic function for simulating expression
-    returns expression, causal_snps, true effects and tissue variance
+    returns expression, causal_snps, true effects and study variance
     you can fix any of the returned values by passing values
     anything not specified will be randomly generated
     TODO: specify how to generate active
@@ -57,17 +150,17 @@ def sim_expression(data, n_tissues=1, n_causal=None, pve=0.1,
     if causal_snps is None:
         causal_snps = np.random.choice(n_snps, n_causal, replace=False)
     if true_effects is None:
-        true_effects = np.random.normal(size=(n_tissues, n_causal)) * active
-    if tissue_variance is None:
+        true_effects = np.random.normal(size=(n_studys, n_causal)) * active
+    if study_variance is None:
         if np.isscalar(pve):
             pve = np.ones(true_effects.shape[0]) * pve
-        tissue_variance = np.array([
+        study_variance = np.array([
             compute_sigma2(data.X[:, causal_snps], te, pve)
             for te, pve in zip(true_effects, pve)
         ])
     #simulate expression
     expression = (true_effects @ data.X[:, causal_snps].T) + \
-        np.random.normal(size=(n_tissues, n_samples)) * np.sqrt(tissue_variance)[:, None]
+        np.random.normal(size=(n_studys, n_samples)) * np.sqrt(study_variance)[:, None]
     expression = pd.DataFrame(expression - expression.mean(1)[:, None])
 
     return SimpleNamespace(**{
@@ -75,26 +168,26 @@ def sim_expression(data, n_tissues=1, n_causal=None, pve=0.1,
         'causal_snps': causal_snps,
         'true_effects': true_effects,
         'pve': pve,
-        'tissue_variance': tissue_variance
+        'study_variance': study_variance
     })
 
 def simulate_n_causal_variants(data, spec):
     """
-    simulation with fixed number of causal variants per tissue
+    simulation with fixed number of causal variants per study
     """
-    causal_per_tissue = spec.causal_per_tissue
+    causal_per_study = spec.causal_per_study
     n_causal = spec.n_causal
-    n_tissues = spec.n_tissues
+    n_studys = spec.n_studys
     pve = spec.pve
     
     print('generating data')    
-    print('\tn_tissues={}\tcausal_per_tissue={}\tn_causal={}\tpve={}'.format(
-        n_tissues, causal_per_tissue, n_causal, pve))
+    print('\tn_studys={}\tcausal_per_study={}\tn_causal={}\tpve={}'.format(
+        n_studys, causal_per_study, n_causal, pve))
     
     n_snps = data.X.shape[1]
-    true_effects = np.zeros((n_tissues, n_causal))
-    for t in range(n_tissues):
-        causal_in_t = np.random.choice(n_causal, causal_per_tissue, replace=False)
+    true_effects = np.zeros((n_studys, n_causal))
+    for t in range(n_studys):
+        causal_in_t = np.random.choice(n_causal, causal_per_study, replace=False)
         true_effects[t, causal_in_t] = np.random.normal(size=causal_in_t.size)
     active = (true_effects != 0)
     return sim_expression(
@@ -103,22 +196,22 @@ def simulate_n_causal_variants(data, spec):
 
 def simulate_max_n_causal_variants(data, spec):
     """
-    simulation with fixed number of causal variants per tissue
+    simulation with fixed number of causal variants per study
     """
     n_causal = spec.n_causal
-    n_tissues = spec.n_tissues
-    max_causal_per_tissue = spec.max_n_causal
+    n_studys = spec.n_studys
+    max_causal_per_study = spec.max_n_causal
     pve = spec.pve
 
     print('generating data')
     print(spec.to_dict())
     causal_snps = np.random.choice(data.common_snps.size, n_causal)
     true_effects = []
-    for _ in range(n_tissues):
-        causal_in_tissue = np.random.choice(max_causal_per_tissue)
-        causal_in_tissue = np.random.choice(n_causal, causal_in_tissue, replace=False)
+    for _ in range(n_studys):
+        causal_in_study = np.random.choice(max_causal_per_study)
+        causal_in_study = np.random.choice(n_causal, causal_in_study, replace=False)
         effects = np.zeros(n_causal)
-        effects[causal_in_tissue] = np.random.normal(size=causal_in_tissue.size)
+        effects[causal_in_study] = np.random.normal(size=causal_in_study.size)
         true_effects.append(effects)
 
     true_effects = np.array(true_effects)
@@ -146,11 +239,11 @@ def sim_expression_from_model(data, spec):
     print('setting random seed')
     return sim_expression(
         data,
-        n_tissues=model.tissue_ids.size,
+        n_studys=model.study_ids.size,
         n_causal=active.sum(),
         active=(model.active > 0.5)[:, active],
         true_effects=true_effects,
-        tissue_variance = 1 / model.expected_tissue_precision
+        study_variance = 1 / model.expected_study_precision
     )
 
 

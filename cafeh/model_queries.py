@@ -28,69 +28,61 @@ def get_top_snp_per_component(self):
     """
     return self.snp_ids[self.pi.T.argmax(axis=0)], self.pi.T.max(axis=0)
 
-def get_credible_sets(self, alpha=0.9, thresh=0.5):
+def _get_cs(pi, alpha):
+    argsort = np.flip(np.argsort(pi))
+    cset_size = (np.cumsum(pi[argsort]) < alpha).sum() + 1
+    return argsort[:cset_size]
+
+def get_credible_sets(self, alpha=0.95):
     """
-    return snps for active components
-    thresh is a threshold on the 
+    return cs and purity for each component
+    alpha the credible set posterior mass
     """
-    credible_sets = {}
-    credible_set_idx = {}
-    for k in np.arange(self.dims['K']):
-        cset_size = (np.cumsum(np.flip(np.sort(self.pi.T[:, k]))) < alpha).sum() + 1
-        cset = np.flip(np.argsort(self.pi.T[:, k])[-cset_size:])
-        credible_sets[k] = self.snp_ids[cset]
-        credible_set_idx[k] = cset
-    purities = {}
-    for key, snps in credible_set_idx.items():
-        if snps.size == 1:
-            purity = 1.0
-        elif snps.size > 500:
-            purity = 0.0
+    credible_sets = {k: _get_cs(self.pi[k], alpha) for k in range(self.dims['K'])}
+    purity = {}
+    for k in range(self.dims['K']):
+        if credible_sets[k].size == 1:
+            purity[k] = 1.0
+        elif credible_sets[k].size < 100:
+            LD = self.get_ld(credible_sets[k])
+            purity[k] = np.min(np.abs(LD))
         else:
-            ld = self.get_ld(snps=snps)
-            if ld.shape[0] == 1:
-                purity = 1.0
-            else:
-                if np.ndim(ld) == 2:
-                    ld = ld[None]
-                purity = np.max([
-                    np.abs(x[np.tril_indices(x.shape[0], -1)]).min()
-                    for x in ld
-                ])
-        purities[key] = purity
+            cs = np.random.choice(credible_sets[k], 100)
+            LD = self.get_ld(cs)
+            purity[k] = np.min(np.abs(LD))
 
-    return credible_sets, purities
+    return credible_sets, purity
 
-def get_tissue_pip(self):
+def get_study_pip(self):
     """
-    return posterior inclusion probability for each tissue, SNP pair
+    return posterior inclusion probability for each study, SNP pair
     PIP is the probability that a SNP is the causal snp in at least one component
     """
     pip = np.zeros((self.dims['N'], self.dims['T']))
     for t in range(self.dims['T']):
         for n in range(self.dims['N']):
-            pip[n, t] = 1 - np.exp(np.sum([np.log(1 - self.pi.T[n, k] * self.active[t, k]) for k in range(self.dims['K'])]))
+            pip[n, t] = 1 - np.exp(np.sum([np.log(1 - self.pi.T[n, k] * self.active[t, k] + 1e-100) for k in range(self.dims['K'])]))
 
-    return pd.DataFrame(pip, index=self.snp_ids, columns=self.tissue_ids)
+    return pd.DataFrame(pip.T, columns=self.snp_ids, index=self.study_ids)
 
 def get_pip(self, components=None):
     """
     return posterior inclusion probability for each SNP
-    PIP is the probability that a SNP is the causal snp in at least one component in at least one tissue
+    PIP is the probability that a SNP is the causal snp in at least one component in at least one study
     """
     if components is None:
         components = np.arange(self.dims['K'])
     pip = np.zeros(self.dims['N'])
     for n in range(self.dims['N']):
         pip[n] = 1 - np.exp(np.sum([np.log(1 - self.pi.T[n, k] * 
-            (1 - np.exp(np.sum([np.log(1 - self.active[t, k]) 
+            (1 - np.exp(np.sum([np.log(1 - self.active[t, k] + 1e-100) 
                 for t in range(self.dims['T'])]))))
         for k in components]))
     return pip
 
 def get_component_coloc(self):
     """
-    returns K x T x T matrix for probability of colocalization of two tissues in a component
+    returns K x T x T matrix for probability of colocalization of two studys in a component
     """
     weight_var = 1 / (1 + (1 /self.prior_variance))
     sign_error = norm.cdf(-np.abs(self.weights) / np.sqrt(weight_var))
@@ -108,8 +100,8 @@ def get_component_coloc(self):
 
 def get_A_in_B_coloc(self):
     """
-    returns pairwise probability that active components in tissue A
-    are a subset of the active components of tissue B
+    returns pairwise probability that active components in study A
+    are a subset of the active components of study B
 
     ie component k on in A -> k on in B
        component k off in B -> k off in A
@@ -127,11 +119,11 @@ def get_A_in_B_coloc(self):
 
         probs += np.eye(self.dims['T']) - np.diag(np.diag(probs))
         
-    return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
+    return pd.DataFrame(probs, index=self.study_ids, columns=self.study_ids)
 
 def get_A_equals_B_coloc(self):
     """
-    return pairwise probability that the active components in two tissues are identicle
+    return pairwise probability that the active components in two studys are identicle
     component k on in A <--> k on in B
     """
     weight_var = 1 / (1 + (1 /self.prior_variance))
@@ -141,14 +133,14 @@ def get_A_equals_B_coloc(self):
         for t2 in range(self.dims['T']):
             A = self.active[t1] * (1 - sign_error[t1])
             B = self.active[t2] * (1 - sign_error[t2])
-            # prod(p(component on in both tissues) +p(component off in both tissues))
+            # prod(p(component on in both studys) +p(component off in both studys))
             probs[t1, t2] = np.exp(np.sum(np.log(A * B + (1 - A) * (1 - B) + 1e-10)))
         probs += np.eye(self.dims['T']) - np.diag(np.diag(probs))
-    return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
+    return pd.DataFrame(probs, index=self.study_ids, columns=self.study_ids)
 
 def get_A_intersect_B_coloc(self):
     """
-    return pairwise probability that at least one component is shared by both tissues
+    return pairwise probability that at least one component is shared by both studys
     component k on in A AND k on in B for some k
     """
     weight_var = 1 / (1 + (1 /self.prior_variance))
@@ -158,10 +150,10 @@ def get_A_intersect_B_coloc(self):
         for t2 in range(self.dims['T']):
             A = self.active[t1] * (1 - sign_error[t1])
             B = self.active[t2] * (1 - sign_error[t2])
-            # 1 - p(all components off in both tissues)
+            # 1 - p(all components off in both studys)
             probs[t1, t2] = 1 - np.exp(np.sum(np.log((1 - A * B) + 1e-10)))
         probs += np.eye(self.dims['T']) - np.diag(np.diag(probs))
-    return pd.DataFrame(probs, index=self.tissue_ids, columns=self.tissue_ids)
+    return pd.DataFrame(probs, index=self.study_ids, columns=self.study_ids)
 
 
 def compute_component_bayes_factors(self, prior_variance):

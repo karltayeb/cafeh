@@ -15,10 +15,10 @@ class CAFEH2:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, check_convergence, get_expected_weights
 
-    def __init__(self, R1, R2, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, tolerance=1e-5):
+    def __init__(self, R1, R2, Y, K, prior_activity=1.0, prior_variance=1.0, prior_pi=None, snp_ids=None, study_ids=None, tolerance=1e-5):
         """
         X [N x N] covariance matrix
-            if X is [T x N x N] use seperate embedding for each tissue
+            if X is [T x N x N] use seperate embedding for each study
         Y [T x N] matrix, Nans should be converted to 0s?
         """
 
@@ -37,7 +37,7 @@ class CAFEH2:
         self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
 
         # ids
-        self.tissue_ids = tissue_ids if (tissue_ids is not None) else np.arange(T)
+        self.study_ids = study_ids if (study_ids is not None) else np.arange(T)
         self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
 
         # initialize variational parameters
@@ -127,13 +127,13 @@ class CAFEH2:
             beta = self.beta0 + second_moment / 2 * self.prior_component_precision[k]
             self.prior_precision[:, k] = np.clip((alpha - 1) / beta, 1e-10, 1e5)
 
-        for tissue in range(self.dims['T']):
-            precision = np.diag(self.R1R2invR1) + (1 / self.prior_variance()[tissue, k])
+        for study in range(self.dims['T']):
+            precision = np.diag(self.R1R2invR1) + (1 / self.prior_variance()[study, k])
             variance = 1 / precision
-            mean = (r_k[tissue] @ self.R2invR1) * variance
+            mean = (r_k[study] @ self.R2invR1) * variance
 
-            self.weight_vars[tissue, k] = variance
-            self.weight_means[tissue, k] = mean
+            self.weight_vars[study, k] = variance
+            self.weight_means[study, k] = mean
 
     def update_weights(self, components=None, ARD=False):
         """
@@ -222,25 +222,25 @@ class CAFEH2:
 
         
         # compute expected conditional log likelihood E[ln p(Y | X, Z)]
-        for tissue in range(self.dims['T']):
-            p = self.active[tissue] @ (self.pi * self.weight_means[tissue])
-            expected_conditional += np.inner(self.Y[tissue] @ self.R2invR1, p)
+        for study in range(self.dims['T']):
+            p = self.active[study] @ (self.pi * self.weight_means[study])
+            expected_conditional += np.inner(self.Y[study] @ self.R2invR1, p)
 
-            z = self.pi * self.weight_means[tissue] #* self.active[tissue]
+            z = self.pi * self.weight_means[study] #* self.active[study]
             z = z @ self.R1R2invR1 @ z.T
             z = z - np.diag(np.diag(z))
             expected_conditional += -0.5 * z.sum()
-            expected_conditional += -0.5 * ((self.weight_means[tissue] ** 2 + self.weight_vars[tissue]) * self.pi).sum()
+            expected_conditional += -0.5 * ((self.weight_means[study] ** 2 + self.weight_vars[study]) * self.pi).sum()
         """
 
         # compute expected conditional log likelihood E[ln p(Y | X, Z)]
-        for tissue in range(self.dims['T']):
-            p = self.active[tissue] @ (self.pi * self.weight_means[tissue])
-            expected_conditional += np.inner(self.Y[tissue] @ self.R2invR1, p)
+        for study in range(self.dims['T']):
+            p = self.active[study] @ (self.pi * self.weight_means[study])
+            expected_conditional += np.inner(self.Y[study] @ self.R2invR1, p)
             expected_conditional += -0.5 * p @ self.R1R2invR1 @ p
             
-            z = self.pi * self.weight_means[tissue] #* cafeh2.active[tissue]
-            a = z.T @ z + np.diag(((self.weight_means[tissue]**2 + self.weight_vars[tissue]) * self.pi).sum(0))
+            z = self.pi * self.weight_means[study] #* cafeh2.active[study]
+            a = z.T @ z + np.diag(((self.weight_means[study]**2 + self.weight_vars[study]) * self.pi).sum(0))
             b = np.trace(self.R1R2invR1 @ a)
             expected_conditional += -0.5 * b
         """
@@ -260,13 +260,13 @@ class CAFEH2:
         expected_conditional += gamma_logpdf(self.prior_precision, self.alpha0, self.beta0).sum()
         return expected_conditional - KL
 
-    def get_ld(self, tissue=None, snps=None):
+    def get_ld(self, study=None, snps=None):
         """
         get ld matrix
         this function gives a common interface to
         (tisse, snp, snp) and (snp, snp) ld
         """
-        cov = self.R1 # elf.get_cov(tissue=tissue, snps=snps)
+        cov = self.R1 # elf.get_cov(study=study, snps=snps)
         """
         ld = []
         for c in np.atleast_3d(cov):
@@ -276,15 +276,15 @@ class CAFEH2:
         """
         return cov[snps][:, snps]
 
-    def get_cov(self, tissue=None, snps=None):
+    def get_cov(self, study=None, snps=None):
         """
         get ld matrix
         this function gives a common interface to
         (tisse, snp, snp) and (snp, snp) ld
         """
         if np.ndim(self.R2) == 2:
-            tissue = None
-        return np.squeeze(self.R2[tissue][..., snps, :][..., snps])
+            study = None
+        return np.squeeze(self.R2[study][..., snps, :][..., snps])
 
     def sort_components(self):
         """

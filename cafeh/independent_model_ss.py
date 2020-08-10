@@ -7,17 +7,17 @@ from .utils import np_cache_class, gamma_logpdf
 from functools import lru_cache
 import time
 
-class IndependentFactorSER:
+class CAFEHG:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip, get_expected_weights, check_convergence
+    from .model_queries import get_credible_sets, get_pip, get_study_pip, get_expected_weights, check_convergence
 
-    def __init__(self, X, Y, K, covariates=None, prior_variance=1.0, prior_pi=None, snp_ids=None, tissue_ids=None, sample_ids=None, tolerance=1e-5):
+    def __init__(self, X, Y, K, covariates=None, prior_variance=1.0, prior_pi=None, snp_ids=None, study_ids=None, sample_ids=None, tolerance=1e-5):
         """
-        Y [T x M] expresion for tissue, individual
+        Y [T x M] expresion for study, individual
         X [N x M] genotype for snp, individual
-            potentially [T x N x M] if tissue specific correction
+            potentially [T x N x M] if study specific correction
         prior_weight_variance [T, K]
-            prior variance for weight of (tissue, component) loading
+            prior variance for weight of (study, component) loading
         prior_activity [K]
             prior probability of sapling from slab in component k
         prior_pi: prior for multinomial,
@@ -38,7 +38,7 @@ class IndependentFactorSER:
         N = X.shape[0]
         self.dims = {'N': N, 'M': M, 'T': T, 'K': K}
 
-        self.tissue_ids = tissue_ids if (tissue_ids is not None) else np.arange(T)
+        self.study_ids = study_ids if (study_ids is not None) else np.arange(T)
         self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
         self.sample_ids = sample_ids if (sample_ids is not None) else np.arange(M)
 
@@ -54,7 +54,7 @@ class IndependentFactorSER:
         if self.covariates is not None:
             self.cov_weights = {
                 t: np.zeros(self.covariates.loc[t].shape[0])
-                for t in self.tissue_ids
+                for t in self.study_ids
             }
         else:
             self.cov_weights = None
@@ -69,8 +69,8 @@ class IndependentFactorSER:
         self.c = 1e-10
         self.d = 1e-10
 
-        self.tissue_precision_a = np.ones(T)
-        self.tissue_precision_b = np.nanvar(Y, 1)
+        self.study_precision_a = np.ones(T)
+        self.study_precision_b = np.nanvar(Y, 1)
 
         self.elbos = []
         self.tolerance = tolerance
@@ -78,11 +78,12 @@ class IndependentFactorSER:
 
 
         masks = {t: ~np.isnan(self.Y[t]) for t in range(T)}
-        diags = {t: np.einsum(
-            'ij, ij->i', self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)}
+        self.diags = np.array([
+            np.einsum('ij, ij->i',
+                self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)])
 
         if covariates is not None:
-            cov_pinv = {t: np.linalg.pinv(self.covariates.loc[t].values.T) for t in self.tissue_ids}
+            cov_pinv = {t: np.linalg.pinv(self.covariates.loc[t].values.T) for t in self.study_ids}
         else:
             cov_pinv = {}
 
@@ -90,18 +91,17 @@ class IndependentFactorSER:
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
-            'diags': diags,
             'masks': masks,
             'cov_pinv': cov_pinv,
             'covariate_prediction': {}
         }
 
     @property
-    def expected_tissue_precision(self):
+    def expected_study_precision(self):
         """
-        expected precision for tissue under variational approximation
+        expected precision for study under variational approximation
         """
-        return self.tissue_precision_a / self.tissue_precision_b
+        return self.study_precision_a / self.study_precision_b
 
     @property
     def expected_weight_precision(self):
@@ -139,18 +139,18 @@ class IndependentFactorSER:
         """
         return self.get_credible_sets()[1]
 
-    def _get_mask(self, tissue):
+    def _get_mask(self, study):
         """
         nan mask to deal with missing values
         """
-        return self.precompute['masks'][tissue]
+        return self.precompute['masks'][study]
 
-    def _get_diag(self, tissue):
+    def _get_diag(self, study):
         """
-        get diag(X^T X) for a given tissue
-        differs for tissues because of missingness in Y
+        get diag(X^T X) for a given study
+        differs for studys because of missingness in Y
         """
-        return self.precompute['diags'][tissue]
+        return self.diags[study]
 
     def compute_first_moment(self, component):
         """
@@ -194,8 +194,8 @@ class IndependentFactorSER:
 
         prediction = []
         if (self.covariates is not None) and compute:
-            for i, tissue in enumerate(self.tissue_ids):
-                prediction.append(self.cov_weights[tissue] @ self.covariates.loc[tissue].values)
+            for i, study in enumerate(self.study_ids):
+                prediction.append(self.cov_weights[study] @ self.covariates.loc[study].values)
             prediction = np.array(prediction)
         else:
             prediction = np.zeros_like(self.Y)
@@ -241,23 +241,23 @@ class IndependentFactorSER:
             ERSS[t] += m2pid.sum() + np.sum(mpX.sum(0)**2) - np.sum(mpX**2)
         return ERSS
 
-    def _update_covariate_weights_tissue(self, residual, tissue):
+    def _update_covariate_weights_study(self, residual, study):
         """
         update covariates
         nans are masked with 0s-- same as filtering down to relevant
         samples
         """
-        Y = np.squeeze(residual[self.tissue_ids == tissue])
+        Y = np.squeeze(residual[self.study_ids == study])
         Y[np.isnan(Y)] = 0
-        pinvX = self.precompute['cov_pinv'][tissue]
-        self.cov_weights[tissue] = pinvX @ Y
+        pinvX = self.precompute['cov_pinv'][study]
+        self.cov_weights[study] = pinvX @ Y
 
     def _update_pi_component(self, k, residual=None):
         """
         update pi for a component
         """
         mask = np.isnan(self.Y)
-        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
+        diag = self.diags
         if residual is None:
             r_k = self.compute_residual(k)
         else:
@@ -267,7 +267,7 @@ class IndependentFactorSER:
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision[:, k][:, None]
-        E_tau = self.expected_tissue_precision[:, None]
+        E_tau = self.expected_study_precision[:, None]
         Ew2 = self.compute_Ew2(k)
         active = self.active[:, k][:, None]
 
@@ -326,17 +326,17 @@ class IndependentFactorSER:
         update weights for a component
         """
         mask = np.isnan(self.Y)
-        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])
+        diag = self.diags
         if residual is None:
             r_k = self.compute_residual(k)
         else:
             r_k = residual
         r_k[mask] = 0
 
-        precision = diag * self.expected_tissue_precision[:, None] \
+        precision = diag * self.expected_study_precision[:, None] \
             + self.expected_weight_precision[:, k][:, None]
         variance = 1 / precision  # [T, N]
-        mean = (variance * self.expected_tissue_precision[:, None]) \
+        mean = (variance * self.expected_study_precision[:, None]) \
             * (r_k @ self.X.T)
 
         # update params
@@ -362,14 +362,14 @@ class IndependentFactorSER:
         """
         update active
         """
-        diag = np.array([self._get_diag(t) for t in range(self.dims['T'])])  # T x N
+        diag = self.diags  # T x N
         r_k = self.compute_residual(k)
         r_k[np.isnan(self.Y)] = 0
         p_k = self.compute_first_moment(k) / self.active[:, k][:, None]
 
         tmp1 = -2 * np.einsum('ij,ij->i', r_k, p_k) \
             + (self.compute_Ew2(k) * diag) @ self.pi[k]
-        tmp1 = -0.5 * self.expected_tissue_precision * tmp1
+        tmp1 = -0.5 * self.expected_study_precision * tmp1
         tmp2 = -0.5 * self.expected_weight_precision[:, k] \
             * (self.compute_Ew2(k) @ self.pi[k]) \
             + normal_entropy(self.weight_vars[:, k]) @ self.pi[k]
@@ -385,9 +385,9 @@ class IndependentFactorSER:
         self.precompute['Hw'].pop(k, None)
         self.precompute['Ew2'].pop(k, None)
 
-    def update_tissue_variance(self, residual=None):
+    def update_study_variance(self, residual=None):
         """
-        update tau, controls tissue specific variance
+        update tau, controls study specific variance
         """
         if residual is None:
             residual = self.compute_residual()
@@ -396,8 +396,8 @@ class IndependentFactorSER:
         n_samples = np.array([
             self._get_mask(t).sum() for t in range(self.dims['T'])
         ])
-        self.tissue_precision_a = self.c + n_samples / 2
-        self.tissue_precision_b = self.d + ERSS / 2
+        self.study_precision_a = self.c + n_samples / 2
+        self.study_precision_b = self.d + ERSS / 2
 
     def update_covariate_weights(self):
         """
@@ -405,10 +405,10 @@ class IndependentFactorSER:
         """
         if self.covariates is not None:
             residual = self.compute_residual(use_covariates=False)
-            for tissue in self.tissue_ids:
-                self._update_covariate_weights_tissue(residual, tissue)
+            for study in self.study_ids:
+                self._update_covariate_weights_study(residual, study)
 
-    def fit(self, max_iter=1000, verbose=False, components=None, update_weights=True, update_pi=True, update_active=True, update_variance=True, ARD_weights=False, update_covariate_weights=True):
+    def fit(self, max_iter=1000, verbose=False, components=None, **kwargs):
         """
         loop through updates until convergence
         """
@@ -418,23 +418,23 @@ class IndependentFactorSER:
 
         for i in range(max_iter):
             # update covariate weights
-            if (self.covariates is not None) and update_covariate_weights:
+            if (self.covariates is not None) and kwargs.get('update_covariate_weights', True):
                 self.update_covariate_weights()
 
             # update component parameters
             for l in components:
-                if ARD_weights:
+                if kwargs.get('ARD_weights', False):
                     self.update_ARD_weights(l)
-                if update_weights:
+                if kwargs.get('update_weights', False):
                     self._update_weight_component(l)
-                if update_pi:
+                if kwargs.get('update_pi', False):
                     self._update_pi_component(l)
-                if update_active:
+                if kwargs.get('update_active', False):
                     self._update_active_component(l)
 
             # update variance parameters
-            if update_variance:
-                self.update_tissue_variance()
+            if kwargs.get('update_variance', False):
+                self.update_study_variance()
 
             # monitor convergence with ELBO
             self.elbos.append(self.compute_elbo())
@@ -461,16 +461,16 @@ class IndependentFactorSER:
         E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
         E_alpha = self.expected_weight_precision
 
-        E_ln_tau = digamma(self.tissue_precision_a) - np.log(self.tissue_precision_b)
-        E_tau = self.expected_tissue_precision
+        E_ln_tau = digamma(self.study_precision_a) - np.log(self.study_precision_b)
+        E_tau = self.expected_study_precision
 
         ERSS = self._compute_ERSS()
-        for tissue in range(self.dims['T']):
-            mask = self._get_mask(tissue)
+        for study in range(self.dims['T']):
+            mask = self._get_mask(study)
             expected_conditional += \
                 - 0.5 * mask.sum() * np.log(2 * np.pi) \
-                + 0.5 * mask.sum() * E_ln_tau[tissue] \
-                - 0.5 * E_tau[tissue] * ERSS[tissue]
+                + 0.5 * mask.sum() * E_ln_tau[study] \
+                - 0.5 * E_tau[study] * ERSS[study]
 
         Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])])
         Ew2 = np.einsum('jik,jk->ij', Ew2, self.pi)
@@ -488,7 +488,7 @@ class IndependentFactorSER:
 
         KL -= lik.sum() + entropy.sum()
         KL += gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b).sum()
-        KL += gamma_kl(self.tissue_precision_a, self.tissue_precision_b, self.c, self.d).sum()
+        KL += gamma_kl(self.study_precision_a, self.study_precision_b, self.c, self.d).sum()
         KL += np.sum(
             [categorical_kl(self.pi[k], self.prior_pi) for k in range(self.dims['K'])]
         )
@@ -506,20 +506,67 @@ class IndependentFactorSER:
         """
         return np.atleast_2d(np.corrcoef(self.X[snps.astype(int)]))
 
-    def save(self, output_dir, model_name, save_data=False):
+    def compute_weight_variance(self, k):
+        """
+        compute weight variance parameters, need S and fit parameters
+        """
+        diag = self.diags
+        precision = diag * self.expected_study_precision[:, None] \
+            + self.expected_weight_precision[:, k][:, None]
+        variance = 1 / precision  # [T, N]
+        return variance
+
+    def _get_compress_mask(self):
+        """
+        get snps to retain for each component
+        """
+        return self.pi > 3/self.pi.shape[1]
+
+    def _compress_model(self):
+        """
+        compress weight means and weight vars
+        save a copy of S
+        """
+        mask = self._get_compress_mask()
+        self.weight_means = self.weight_means[:, mask]
+        self.weight_vars = None
+
+    def _decompress_model(self):
+        """
+        unpack model for use
+        """
+        mask = self._get_compress_mask()
+        weight_means = np.zeros((self.dims['T'], self.dims['K'], self.dims['N']))
+        weight_means[:, mask] = self.weight_means
+
+        weight_vars = np.zeros((self.dims['T'], self.dims['K'], self.dims['N']))
+        for k in range(self.dims['K']):
+            weight_vars[:, k] = self.compute_weight_variance(k)
+        self.weight_means = weight_means
+        self.weight_vars = weight_vars
+
+    def save(self, save_path, save_data=False):
         """
         save the model
         """
+        # make save directory
+        output_dir = '/'.join(save_path.split('/')[:-1])
         if not os.path.isdir(output_dir):
             os.makedirs(output_dir)
-        if output_dir[-1] == '/':
-            output_dir = output_dir[:-1]
+
+        # empty out model data
+        for key in self.precompute:
+            self.precompute[key] = {}
 
         if not save_data:
             X = self.__dict__.pop('X')
             Y = self.__dict__.pop('Y')
 
-        pickle.dump(self.__dict__, open('{}/{}'.format(output_dir, model_name), 'wb'))
+        self._compress_model()
+        pickle.dump(self, open(save_path, 'wb'))
+        self._decompress_model()
+
+        # add back model data
         if not save_data:
             self.__dict__['X'] = X
             self.__dict__['Y'] = Y

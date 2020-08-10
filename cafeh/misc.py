@@ -55,12 +55,28 @@ def get_common_snps(gene):
     return table[table.has_test & table.in_1kG].rsid.values
 
 
-def load(model_path):
+def load_old(model_path):
     model = pickle.load(open(model_path, 'rb'))
     rehydrate_model(model)
     model.name = model_path.split('/')[-1]
     return model
 
+def load(path):
+    model = pickle.load(open(path, 'rb'))
+    model._decompress_model()
+    return model
+
+def load_as_cafeh_summary(path):
+    pass
+
+def load_as_cafeh_genotype(path):
+    pass
+
+def load_as_cafeh_summary_simple(path):
+    pass
+
+def load_as_cafeh_genotype_simple(path):
+    pass
 
 def need_to_flip(variant_id):
     _, _, major, minor, _, ref = variant_id.strip().split('_')
@@ -126,9 +142,9 @@ def load_gtex_summary_stats(gene):
 
     associations = pd.read_csv(ap)
     associations.loc[:, 'sample_size'] = (associations.ma_count / associations.maf / 2)
-    Ba = associations.pivot('tissue', 'variant_id', 'slope')
-    Va = associations.pivot('tissue', 'variant_id', 'slope_se')**2
-    n = associations.pivot('tissue', 'variant_id', 'sample_size')
+    Ba = associations.pivot('study', 'variant_id', 'slope')
+    Va = associations.pivot('study', 'variant_id', 'slope_se')**2
+    n = associations.pivot('study', 'variant_id', 'sample_size')
     Sa = np.sqrt(Ba**2/n + Va)
 
     [x.rename(columns=v2r, inplace=True) for x in [Ba, Sa, Va, n]];
@@ -179,24 +195,24 @@ def load_gtex_residual_expression(gene):
         sep='\t', index_col=[0, 1])
 
     residual_expression = {}
-    for tissue in expression.index.values:
-        samples = expression.columns.values[~np.isnan(expression.loc[tissue])]
-        beta = np.linalg.pinv(covariates.loc[tissue, samples].T) @ expression.loc[tissue, samples]
-        residual_expression[tissue] = \
-            expression.loc[tissue, samples] - covariates.loc[tissue, samples].T @ beta
+    for study in expression.index.values:
+        samples = expression.columns.values[~np.isnan(expression.loc[study])]
+        beta = np.linalg.pinv(covariates.loc[study, samples].T) @ expression.loc[study, samples]
+        residual_expression[study] = \
+            expression.loc[study, samples] - covariates.loc[study, samples].T @ beta
 
     residual_expression = pd.DataFrame(residual_expression).T
     return residual_expression.loc[expression.index].loc[:, expression.columns]
 
 
 def center_mean_impute(genotype):
-        """
-        center columns of dataframe
-        fill na with 0 (mean imputation)
-        """
-        X = genotype - genotype.mean()
-        X = X.fillna(0)
-        return X
+    """
+    center columns of dataframe
+    fill na with 0 (mean imputation)
+    """
+    X = genotype - genotype.mean()
+    X = X.fillna(0)
+    return X
 
 def load_gene_data(gene, thin=False):
     # Load GTEx and 1kG genotype
@@ -242,6 +258,7 @@ def load_gene_data(gene, thin=False):
         'B': B, 'S': S, 'V':V, 'n':n, 'common_snps': common_snps,
         'gene': gene, 'id': gene, 'covariates': covariates
     })
+
 
 def compute_sigma2(X, true_effect, pve):
     var = np.var(true_effect @ X.T)
@@ -290,17 +307,16 @@ def make_gtex_genotype_data_dict(expression_path, genotype_path, standardize=Fal
         'covariates': covariates,
         'snp_ids': genotype.columns.values,
         'sample_ids': genotype.index.values,
-        'tissue_ids': gene_expression.index.values
+        'study_ids': gene_expression.index.values
     }
     return data
-
 
 def compute_summary_stats(data):
     B = {}
     V = {}
     S = {}
-    for i, tissue in enumerate(data['tissue_ids']):
-        cov = data['covariates'].loc[tissue]
+    for i, study in enumerate(data['study_ids']):
+        cov = data['covariates'].loc[study]
         mask = ~np.isnan(cov.iloc[0])
         cov = cov.values[:, mask]
         y = data['Y'][i, mask]
@@ -311,10 +327,10 @@ def compute_summary_stats(data):
         yc = y - y @ H
         Xc = X - X @ H
         # prep css data
-        B[tissue] = (Xc @ yc) / np.einsum('ij,ij->i', Xc, Xc)
-        r = yc - B[tissue][:, None]*Xc
-        V[tissue] = np.einsum('ij,ij->i', r, r) / np.einsum('ij,ij->i', Xc, Xc) / (yc.size)
-        S[tissue] = np.sqrt(B[tissue]**2/yc.size + V[tissue])
+        B[study] = (Xc @ yc) / np.einsum('ij,ij->i', Xc, Xc)
+        r = yc - B[study][:, None]*Xc
+        V[study] = np.einsum('ij,ij->i', r, r) / np.einsum('ij,ij->i', Xc, Xc) / (yc.size)
+        S[study] = np.sqrt(B[study]**2/yc.size + V[study])
 
     B = pd.DataFrame(B, index=data['snp_ids']).T
     V = pd.DataFrame(V, index=data['snp_ids']).T
@@ -453,19 +469,6 @@ def strip_and_dump(model, path, save_data=False):
     pickle.dump(model, open(path, 'wb'))
 
 
-def repair_model(model_path):
-    gene = model_path.split('/')[-2]
-    base_path = '/'.join(model_path.split('/')[:-1])
-    expression_path = '{}/{}.expression'.format(base_path, gene)
-    genotype_path = '{}/{}.raw'.format(base_path, gene)
-
-    X = make_gtex_genotype_data_dict(expression_path, genotype_path)['X']
-
-    model = pickle.load(open(model_path, 'rb'))
-    compute_records(model)
-    strip_and_dump(model, model_path)
-
-
 def compute_pip(model):
     active = model.records['active']
     return 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
@@ -481,18 +484,21 @@ def component_scores(model):
         scores = np.einsum('ijk,jk->ij', mw / np.sqrt(mv), model.pi)
         weights = pd.DataFrame(
             scores[:, active],
-            index = model.tissue_ids,
+            index = model.study_ids,
             columns = np.arange(model.dims['K'])[active]
         )
     else:
         weights = pd.DataFrame(
             np.zeros((model.dims['T'], 1)),
-            index = model.tissue_ids
+            index = model.study_ids
         )
     return weights
 
 
 def make_variant_report(model, gene):
+    """
+    report variant level infromation from model
+    """
     PIP = 1 - np.exp(np.log(1 - model.pi + 1e-10).sum(0))
     purity = model.get_credible_sets(0.99)[1]
     active = np.array([purity[k] > 0.5 for k in range(model.dims['K'])])

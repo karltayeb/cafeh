@@ -178,7 +178,7 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
 
     sns.heatmap((self.active)[:, active_components],
         annot=False, cmap='Blues', ax=ax[0],
-        vmin=0, vmax=1, yticklabels=self.tissue_ids)
+        vmin=0, vmax=1, yticklabels=self.study_ids)
     ax[0].set_title('active')
     ax[0].set_xlabel('component')
 
@@ -188,11 +188,11 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
         plt.show()
     plt.close()
 
-def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=None, show=True):
-    if tissues is None:
-        tissues = np.arange(self.dims['T'])
+def plot_decomposed_manhattan(self, studys=None, components=None, save_path=None, show=True):
+    if studys is None:
+        studys = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
+        studys = np.arange(self.dims['T'])[np.isin(self.study_ids, studys)]
 
     if components is None:
         components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
@@ -204,11 +204,11 @@ def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=Non
     logp = -norm.logcdf(-np.abs(pred)) - np.log(2)
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
-    fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
-    for i, t in enumerate(tissues):
+    fig, ax = plt.subplots(2, studys.size, figsize=((studys.size)*4, 6), sharey=False)
+    for i, t in enumerate(studys):
         ulim = []
         llim = []
-        ax[0, i].set_title('{}\n-log p'.format(self.tissue_ids[t]))
+        ax[0, i].set_title('{}\n-log p'.format(self.study_ids[t]))
         ax[1, i].set_title('components')
         ax[0, 0].set_title('-log p')
 
@@ -246,20 +246,20 @@ def plot_decomposed_manhattan(self, tissues=None, components=None, save_path=Non
         plt.show()
     plt.close()
 
-def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, save_path=None):
-    if tissues is None:
-        tissues = np.arange(self.dims['T'])
+def plot_decomposed_manhattan2(self, studys=None, width=None, components=None, save_path=None):
+    if studys is None:
+        studys = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
+        studys = np.arange(self.dims['T'])[np.isin(self.study_ids, studys)]
 
     if components is None:
         components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
     if width is None:
-        width = int(np.sqrt(tissues.size)) + 1
+        width = int(np.sqrt(studys.size)) + 1
         height = width
     else:
-        height = int(tissues.size / width) + 1
+        height = int(studys.size / width) + 1
 
     pred = ((self.active * self.weight_means) @ (self.X @ self.pi.T).T)
     logp = - norm.logcdf(-np.abs(pred)) - np.log(2)
@@ -272,8 +272,8 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
     fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
 
     ax = np.array(ax).flatten()
-    for i, t in enumerate(tissues):
-        ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
+    for i, t in enumerate(studys):
+        ax[i].set_title('{}\nby component'.format(self.study_ids[t]))
 
         for k in components:
             predk = self.compute_prediction() - self._compute_prediction(k=k)
@@ -291,27 +291,27 @@ def plot_decomposed_manhattan2(self, tissues=None, width=None, components=None, 
     # plt.show()
     plt.close()
 
-def plot_decomposed_zscores(self, tissues=None, components=None, thresh=0.9, save_path=None, show=True):
+def plot_decomposed_zscores(self, studys=None, components=None, thresh=0.9, save_path=None, show=True):
     """
-    if tissues is None:
-        tissues = np.arange(self.dims['T'])
+    if studys is None:
+        studys = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
+        studys = np.arange(self.dims['T'])[np.isin(self.study_ids, studys)]
     """
-    tissues = np.arange(self.dims['T'])
+    studys = np.arange(self.dims['T'])
     cs, p = self.get_credible_sets()
     components = np.array([k for k in range(self.dims['K']) if p[k] > 0.5])
 
     pred = self.compute_prediction()
     pos = np.arange(self.snp_ids.size)
 
-    fig, ax = plt.subplots(2, tissues.size, figsize=((tissues.size)*4, 6), sharey=False)
+    fig, ax = plt.subplots(2, studys.size, figsize=((studys.size)*4, 6), sharey=False)
     ax = np.atleast_2d(ax)
     if ax.shape[0] == 1:
         ax = ax.T
 
-    for t in tissues:
-        ax[0, t].set_title('{}\nzscores'.format(self.tissue_ids[t]))
+    for t in studys:
+        ax[0, t].set_title('{}\nzscores'.format(self.study_ids[t]))
         ax[1, t].set_title('components')
         ax[1, t].set_xlabel('SNP position')
 
@@ -337,20 +337,20 @@ def plot_decomposed_zscores(self, tissues=None, components=None, thresh=0.9, sav
         plt.show()
     plt.close()
 
-def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, save_path=None):
-    if tissues is None:
-        tissues = np.arange(self.dims['T'])
+def plot_decomposed_zscores2(self, studys=None, width=None, components=None, save_path=None):
+    if studys is None:
+        studys = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
+        studys = np.arange(self.dims['T'])[np.isin(self.study_ids, studys)]
 
     if components is None:
         components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
 
     if width is None:
-        width = int(np.sqrt(tissues.size)) + 1
+        width = int(np.sqrt(studys.size)) + 1
         height = width
     else:
-        height = int(tissues.size / width) + 1
+        height = int(studys.size / width) + 1
 
     pred = self.compute_prediction()
     logp = -np.log(norm.cdf(-np.abs(pred))*2)
@@ -363,8 +363,8 @@ def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, sa
     fig, ax = plt.subplots(height, width, figsize=(width*4, height*3), sharey=False)
 
     ax = np.array(ax).flatten()
-    for i, t in enumerate(tissues):
-        ax[i].set_title('{}\nby component'.format(self.tissue_ids[t]))
+    for i, t in enumerate(studys):
+        ax[i].set_title('{}\nby component'.format(self.study_ids[t]))
 
         for k in components:
             predk = self.compute_prediction() - self._compute_prediction(k=k)
@@ -381,14 +381,14 @@ def plot_decomposed_zscores2(self, tissues=None, width=None, components=None, sa
     # plt.show()
     plt.close()
 
-def plot_residual_zscores(self, tissues=None, components=None, save_path=None):
+def plot_residual_zscores(self, studys=None, components=None, save_path=None):
     """
-    plot residual of tissue t with components removed
+    plot residual of study t with components removed
     """
-    if tissues is None:
-        tissues = np.arange(self.dims['T'])
+    if studys is None:
+        studys = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
+        studys = np.arange(self.dims['T'])[np.isin(self.study_ids, studys)]
 
     if components is None:
         components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
@@ -396,10 +396,10 @@ def plot_residual_zscores(self, tissues=None, components=None, save_path=None):
     W = self.active * self.weight_means
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
 
-    fig, ax = plt.subplots(components.size, tissues.size, figsize=(tissues.size*4, components.size*3), sharey=False)
+    fig, ax = plt.subplots(components.size, studys.size, figsize=(studys.size*4, components.size*3), sharey=False)
     residual = self._compute_residual()
     for j, k in enumerate(components):
-        for i, t in enumerate(tissues):
+        for i, t in enumerate(studys):
             residual_k = self._compute_residual(k=k)
             #ax[j, i].scatter(pos, self.Y[t], alpha=0.5, marker='x', color='k')
             #ax[j, i].scatter(pos, residual, alpha=0.5, marker='o', color='r')
@@ -412,7 +412,7 @@ def plot_residual_zscores(self, tissues=None, components=None, save_path=None):
             else:
                 ax[j, i].scatter(self.Y[t], residual_k, alpha=0.5, marker='o', color='r', label='inactive component residual')
 
-            ax[j, i].set_title('{}\n{} removed'.format(self.tissue_ids[t], k))
+            ax[j, i].set_title('{}\n{} removed'.format(self.study_ids[t], k))
             ax[j, i].set_xlabel('observed z score')
             ax[j, i].set_ylabel('residual z score')
             ax[j, i].legend()
@@ -423,14 +423,14 @@ def plot_residual_zscores(self, tissues=None, components=None, save_path=None):
     # plt.show()
     plt.close()
 
-def plot_residual_manhattan(self, tissues=None, components=None, save_path=None):
+def plot_residual_manhattan(self, studys=None, components=None, save_path=None):
     """
-    plot residual of tissue t with components removed
+    plot residual of study t with components removed
     """
-    if tissues is None:
-        tissues = np.arange(self.dims['T'])
+    if studys is None:
+        studys = np.arange(self.dims['T'])
     else:
-        tissues = np.arange(self.dims['T'])[np.isin(self.tissue_ids, tissues)]
+        studys = np.arange(self.dims['T'])[np.isin(self.study_ids, studys)]
 
     if components is None:
         components = np.arange(self.dims['K'])[np.any((self.active > 0.5), 0)]
@@ -439,13 +439,13 @@ def plot_residual_manhattan(self, tissues=None, components=None, save_path=None)
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
     logp = -norm.logcdf(-np.abs(self.Y)) - np.log(2)
 
-    fig, ax = plt.subplots(components.size, tissues.size, figsize=(tissues.size*4, components.size*3), sharey=False)
+    fig, ax = plt.subplots(components.size, studys.size, figsize=(studys.size*4, components.size*3), sharey=False)
 
     residual = self._compute_residual()
     residual_logp = -norm.logcdf(-np.abs(residual)) - np.log(2)
 
     for j, k in enumerate(components):
-        for i, t in enumerate(tissues):
+        for i, t in enumerate(studys):
             residual_k = self._compute_residual(k=k)
             residual_k_logp = -norm.logcdf(-np.abs(residual_k)) - np.log(2)
 
@@ -460,7 +460,7 @@ def plot_residual_manhattan(self, tissues=None, components=None, save_path=None)
             else:
                 ax[j, i].scatter(logp[t], residual_k_logp, alpha=0.5, marker='o', color='r', label='inactive component residual')
 
-            ax[j, i].set_title('{}\n{} removed'.format(self.tissue_ids[t], k))
+            ax[j, i].set_title('{}\n{} removed'.format(self.study_ids[t], k))
             ax[j, i].set_xlabel('observed -log pvalue')
             ax[j, i].set_ylabel('residual -log pvalue')
             ax[j, i].legend()
@@ -483,7 +483,7 @@ def plot_predictions(self, save_path=None, show=True):
         ax[0, t].set_xlabel('SNP')
 
         ax[1, t].scatter(pred[t], self.Y[t], marker='x', c='k', alpha=0.5)
-        ax[0, t].set_title('Tissue: {}'.format(self.tissue_ids[t]))
+        ax[0, t].set_title('study: {}'.format(self.study_ids[t]))
         ax[1, t].set_xlabel('prediction')
 
     ax[0, 0].set_ylabel('observed')
@@ -496,21 +496,21 @@ def plot_predictions(self, save_path=None, show=True):
 
 def plot_manhattan(self, component, thresh=0.0, save_path=None):
     """
-    make manhattan plot for tissues, colored by lead snp of a components
-    include tissues with p(component active in tissue) > thresh
+    make manhattan plot for studys, colored by lead snp of a components
+    include studys with p(component active in study) > thresh
     """
     logp = - norm.logcdf(-np.abs(self.Y)) - np.log(2)
     pos = np.array([int(x.split('_')[1]) for x in self.snp_ids])
-    #sorted_tissues = np.flip(np.argsort(self.active[:, component]))
-    #active_tissues = sorted_tissues[self.active[sorted_tissues, component] > thresh]
-    active_tissues = np.arange(self.dims['T'])[self.active[:, component] > thresh]
-    fig, ax = plt.subplots(1, active_tissues.size, figsize=(5*active_tissues.size, 4), sharey=True)
-    for i, tissue in enumerate(active_tissues):
+    #sorted_studys = np.flip(np.argsort(self.active[:, component]))
+    #active_studys = sorted_studys[self.active[sorted_studys, component] > thresh]
+    active_studys = np.arange(self.dims['T'])[self.active[:, component] > thresh]
+    fig, ax = plt.subplots(1, active_studys.size, figsize=(5*active_studys.size, 4), sharey=True)
+    for i, study in enumerate(active_studys):
         lead_snp = self.pi.T[:, component].argmax()
         r2 = self.X[lead_snp]**2
-        ax[i].scatter(pos, logp[tissue], c=r2, cmap='RdBu_r')
-        ax[i].set_title('Tissue: {}\nLead SNP {}\nweight= {:.2f}, p={:.2f}'.format(
-            self.tissue_ids[tissue], lead_snp, self.weight_means[tissue, component],self.active[tissue, component]))
+        ax[i].scatter(pos, logp[study], c=r2, cmap='RdBu_r')
+        ax[i].set_title('study: {}\nLead SNP {}\nweight= {:.2f}, p={:.2f}'.format(
+            self.study_ids[study], lead_snp, self.weight_means[study, component],self.active[study, component]))
         ax[i].set_xlabel('SNP')
 
     ax[0].set_ylabel('-log(p)')
@@ -545,7 +545,7 @@ def plot_component_colocalizations(self, save_path=None, show=True):
     fig, ax = plt.subplots(1, active_components.sum(), figsize=(6 * active_components.sum(), 6))
     for i, k in enumerate(np.arange(self.dims['K'])[active_components]):
         if i == 0:
-            yticklabels = self.tissue_ids
+            yticklabels = self.study_ids
         else:
             yticklabels = []
         sns.heatmap(component_colocalization[k], ax=ax[i], square=True, cmap='Blues',
