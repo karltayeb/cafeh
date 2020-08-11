@@ -561,6 +561,7 @@ class CAFEHG:
         if not save_data:
             X = self.__dict__.pop('X')
             Y = self.__dict__.pop('Y')
+            cov = self.__dict__.pop('covariates')
 
         self._compress_model()
         pickle.dump(self, open(save_path, 'wb'))
@@ -570,3 +571,4 @@ class CAFEHG:
         if not save_data:
             self.__dict__['X'] = X
             self.__dict__['Y'] = Y
+            self.__dict__['covariates'] = cov
