@@ -11,6 +11,59 @@ import random
 import string
 from copy import deepcopy
 
+from types import SimpleNamespace
+import subprocess
+import copy
+import json
+import os
+import numpy as np
+import pandas as pd
+
+def get_chr(gene):
+    gene2chr = json.load(open('data/gene2chr', 'r'))
+    return gene2chr.get(gene, None)
+
+
+def get_tss(gene):
+    gene2chr = json.load(open('data/gene2tss', 'r'))
+    return gene2chr.get(gene, None)
+
+
+def make_plink_cmd(gene, save_path):
+    tss = get_tss(gene)
+    cmd = ' '.join(
+        ['plink',
+         '--bfile', 'data/1k_genomes/1kg.{}'.format(get_chr(gene)),
+         '--chr', get_chr(gene)[3:],
+         '--from-bp', str(np.maximum(tss-1e6, 0)),
+         '--to-bp', str(tss+1e6),
+         '--maf', '0.1',
+         '--geno', '0.1',
+         '--recode', 'A',
+         '--keep-allele-order',
+         '--snps-only',
+         '--out', save_path])
+    return cmd
+
+
+def load_genotype(gene, subset=None):
+    if not os.path.isdir('.tmp/1k_genomes'):
+        os.makedirs('.tmp/1k_genomes')
+    genotype_path = '.tmp/1k_genomes/{}.raw'.format(gene)
+    if not os.path.isfile(genotype_path):
+        print('getting genotype')
+        subprocess.run(make_plink_cmd(gene, genotype_path[:-4]), shell=True)
+    genotype = pd.read_csv(genotype_path, sep=' ').set_index('IID').iloc[:, 5:]
+    gentoype = genotype.rename(columns={x: x.split('_')[0] for x in genotype.columns})
+
+    if subset is not None:
+        snp_subset = np.random.choice(genotype.shape[1], subset, replace=False)
+        genotype = genotype.iloc[:, snp_subset]
+
+    # clean up
+    subprocess.run('rm {}*'.format(genotype_path[:-4]), shell=True)
+    return genotype
+
 def get_chromosome(gene):
     gc = pd.read_csv('/work-zfs/abattle4/karl/cosie_analysis/output/GTEx/protein_coding_autosomal_egenes.txt', sep='\t')
     gc.set_index('gene', inplace=True)

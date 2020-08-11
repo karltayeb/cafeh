@@ -1,0 +1,53 @@
+import numpy as np
+
+def weight_ard_active_fit_procedure(model, **kwargs):
+
+    fit_args = dict(
+        max_iter=50, update_active=False,
+        update_weights=True, update_pi=True,
+        ARD_weights=False
+    )
+    fit_args.update(kwargs)
+    model.fit(**fit_args)
+
+    fit_args = dict(
+        max_iter=50, update_active=False,
+        update_weights=True, update_pi=True,
+        ARD_weights=True
+    )
+    fit_args.update(**kwargs)
+    model.fit(**fit_args)
+
+    fit_args = dict(
+        max_iter=1000, update_active=True,
+        update_weights=True, update_pi=True,
+        ARD_weights=True
+    )
+    fit_args.update(kwargs)
+    model.fit(**fit_args)
+
+
+def forward_fit_procedure(model, **kwargs):
+    print('forward fit procedure')
+    """
+    for l in range(K):
+        fit components 1...l
+
+    fit all components jointly
+    """
+    for l in range(1, model.dims['K']):
+        fit_args = dict(
+            max_iter=5, update_active=False,
+            update_weights=True, update_pi=True,
+            ARD_weights=False, components=np.arange(l)
+        )
+        fit_args.update(**kwargs)
+        model.fit(**fit_args)
+
+    fit_args = dict(
+        max_iter=1000, update_active=True,
+        update_weights=True, update_pi=True,
+        ARD_weights=True
+    )
+    fit_args.update(**kwargs)
+    model.fit(**fit_args)
