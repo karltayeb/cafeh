@@ -37,7 +37,7 @@ def forward_fit_procedure(model, **kwargs):
     """
     for l in range(1, model.dims['K']):
         fit_args = dict(
-            max_iter=5, update_active=False,
+            max_iter=1, update_active=False,
             update_weights=True, update_pi=True,
             ARD_weights=False, components=np.arange(l)
         )
