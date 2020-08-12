@@ -88,12 +88,11 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
     credible_sets, purity = self.get_credible_sets(alpha=alpha)
     for k in np.arange(self.dims['K']):
         if purity[k] > thresh:
-            cset = np.arange(self.dims['N'])[np.isin(self.snp_ids, credible_sets[k])]
-            snps.append(cset)
+            snps.append(credible_sets[k])
 
     sizes = np.array([x.size for x in snps])
     snps = np.concatenate(snps)
-    
+
     fig, ax = plt.subplots(1, figsize=(6, 5))
     ld = self.get_ld(snps=snps)
     if np.ndim(ld) == 2:
@@ -113,6 +112,7 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
     if show:
         plt.show()
     plt.close()
+    
 
 def plot_credible_sets_r2(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
     if snps is None:

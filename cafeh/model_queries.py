@@ -54,30 +54,16 @@ def get_credible_sets(self, alpha=0.95):
     return credible_sets, purity
 
 def get_study_pip(self):
-    """
-    return posterior inclusion probability for each study, SNP pair
-    PIP is the probability that a SNP is the causal snp in at least one component
-    """
-    pip = np.zeros((self.dims['N'], self.dims['T']))
+    pip = []
     for t in range(self.dims['T']):
-        for n in range(self.dims['N']):
-            pip[n, t] = 1 - np.exp(np.sum([np.log(1 - self.pi.T[n, k] * self.active[t, k] + 1e-100) for k in range(self.dims['K'])]))
+        pip.append(1 - np.exp(np.sum(np.log((1 - self.pi * self.active[t][:, None] + 1e-100)), 0)))
+    return pd.DataFrame(np.array(pip), columns=self.snp_ids, index=self.study_ids)
 
-    return pd.DataFrame(pip.T, columns=self.snp_ids, index=self.study_ids)
-
-def get_pip(self, components=None):
-    """
-    return posterior inclusion probability for each SNP
-    PIP is the probability that a SNP is the causal snp in at least one component in at least one study
-    """
-    if components is None:
-        components = np.arange(self.dims['K'])
-    pip = np.zeros(self.dims['N'])
-    for n in range(self.dims['N']):
-        pip[n] = 1 - np.exp(np.sum([np.log(1 - self.pi.T[n, k] * 
-            (1 - np.exp(np.sum([np.log(1 - self.active[t, k] + 1e-100) 
-                for t in range(self.dims['T'])]))))
-        for k in components]))
+def get_pip(self):
+    # probability that each component is active in atleast one tissue
+    active = 1 - np.exp(np.sum(np.log(1 - self.active + 1e-100), 0))
+    # compute pip
+    pip = 1 - np.exp(np.sum(np.log((1 - self.pi * active[:, None] + 1e-100)), 0))
     return pip
 
 def get_component_coloc(self):

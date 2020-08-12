@@ -42,6 +42,7 @@ def forward_fit_procedure(model, **kwargs):
             ARD_weights=False, components=np.arange(l)
         )
         fit_args.update(**kwargs)
+        print(fit_args)
         model.fit(**fit_args)
 
     fit_args = dict(
@@ -50,4 +51,5 @@ def forward_fit_procedure(model, **kwargs):
         ARD_weights=True
     )
     fit_args.update(**kwargs)
+    print(fit_args)
     model.fit(**fit_args)
