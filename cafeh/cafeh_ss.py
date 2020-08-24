@@ -548,7 +548,6 @@ class CAFEH:
 
         if not save_data:
             B = self.__dict__.pop('B')
-            S = self.__dict__.pop('S')
 
         self._compress_model()
         pickle.dump(self, open(save_path, 'wb'))
@@ -559,6 +558,5 @@ class CAFEH:
 
         if not save_data:
             self.__dict__['B'] = B
-            self.__dict__['S'] = S
         self._decompress_model()
 
