@@ -552,7 +552,7 @@ class CAFEH:
 
         self._compress_model()
         pickle.dump(self, open(save_path, 'wb'))
-        self._decompress_model()
+
         # add back model data
         if not save_ld:
             self.__dict__['LD'] = LD
@@ -560,3 +560,5 @@ class CAFEH:
         if not save_data:
             self.__dict__['B'] = B
             self.__dict__['S'] = S
+        self._decompress_model()
+
