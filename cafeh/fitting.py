@@ -1,7 +1,7 @@
 import numpy as np
 
 def weight_ard_active_fit_procedure(model, **kwargs):
-
+    # fit weights w/o ard to initialize
     fit_args = dict(
         max_iter=50, update_active=False,
         update_weights=True, update_pi=True,
@@ -10,6 +10,7 @@ def weight_ard_active_fit_procedure(model, **kwargs):
     fit_args.update(kwargs)
     model.fit(**fit_args)
 
+    # fit with ard
     fit_args = dict(
         max_iter=50, update_active=False,
         update_weights=True, update_pi=True,
@@ -18,6 +19,7 @@ def weight_ard_active_fit_procedure(model, **kwargs):
     fit_args.update(**kwargs)
     model.fit(**fit_args)
 
+    # fit with active
     fit_args = dict(
         max_iter=1000, update_active=True,
         update_weights=True, update_pi=True,

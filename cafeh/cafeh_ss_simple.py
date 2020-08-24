@@ -47,7 +47,7 @@ class CAFEHSimple:
 
         # variational paramters for (gamma-distributed) weight precisions
         self.weight_precision_a = np.ones((T, K))
-        self.weight_precision_b = np.ones((T, K))
+        self.weight_precision_b = np.ones((T, K)) * 0.1
 
         self.c = 1e-10
         self.d = 1e-10
