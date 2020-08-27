@@ -55,3 +55,18 @@ def forward_fit_procedure(model, **kwargs):
     fit_args.update(**kwargs)
     print(fit_args)
     model.fit(**fit_args)
+
+def fit_all(model, **kwargs):
+    """
+    standard fit procedure to run with good initialization
+    update all parameters except tissue prection (not relevant to CAFEH-S)
+    can change default arguments by passing **kwargs
+    """
+    fit_args = dict(
+        max_iter=1000, update_active=True,
+        update_weights=True, update_pi=True,
+        ARD_weights=True
+    )
+    fit_args.update(**kwargs)
+    print(fit_args)
+    model.fit(**fit_args)

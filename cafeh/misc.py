@@ -586,10 +586,15 @@ def make_variant_report(model, gene):
     return A.loc[:, ['gene_id', 'variant_id', 'ref', 'PIP', 'k', 'p', 'min_alpha']]
 
 
-def plot_components(self, thresh=0.5, save_path=None, show=True):
+def plot_components(self, snp2pos=None, thresh=0.5, save_path=None, show=True):
     """
     plot inducing point posteriors, weight means, and probabilities
     """
+    if snp2pos is None:
+        pos = np.arange(self.snp_ids.size)
+    else:
+        pos = np.array([snp2pos[snp] for snp in self.snp_ids])
+
     weights = self.get_expected_weights()
     active_components = self.active.max(0) > 0.5
     if not np.any(active_components):
@@ -597,20 +602,23 @@ def plot_components(self, thresh=0.5, save_path=None, show=True):
 
     fig, ax = plt.subplots(1, 3, figsize=(18, 4))
     sns.heatmap(self.active[:, active_components], ax=ax[0],
-                cmap='Blues', xticklabels=np.arange(active_components.size)[active_components])
+                cmap='Blues',
+                yticklabels=self.study_ids,
+                xticklabels=np.arange(active_components.size)[active_components])
     sns.heatmap(self.get_expected_weights()[:, active_components], ax=ax[1],
                 cmap='RdBu', center=0, xticklabels=np.arange(active_components.size)[active_components])
 
     for k in np.arange(self.dims['K'])[active_components]:
         ax[2].scatter(
-            np.arange(self.dims['N'])[self.pi.T[:, k] > 2/self.dims['N']],
+            pos[self.pi.T[:, k] > 2/self.dims['N']],
             self.pi.T[:, k][self.pi.T[:, k] > 2/self.dims['N']],
             alpha=0.5, label='k{}'.format(k))
-    ax[2].scatter(np.arange(self.dims['N']), np.zeros(self.dims['N']), alpha=0.0)
+    ax[2].set_xlim(pos.min(), pos.max())
     ax[2].set_title('pi')
     ax[2].set_xlabel('SNP')
     ax[2].set_ylabel('probability')
     ax[2].legend(bbox_to_anchor=(1.04,1), loc="upper left")
+    return fig
 
 
 def kl_components(m1, m2):
