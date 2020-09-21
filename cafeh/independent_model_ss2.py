@@ -2,81 +2,108 @@ import numpy as np
 from scipy.stats import norm
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl, normal_entropy, gamma_kl
 import os, sys, pickle
-from .utils import np_cache_class, gamma_logpdf, centered_moment2natural, natural2centered_moment
-from functools import lru_cache
-import pandas as pd
 from scipy.special import digamma
+from .utils import np_cache_class, gamma_logpdf
+from functools import lru_cache
 import time
 
-class CAFEH:
-    """
-    CAFEH RSS estimate of CAFEH-G with spike and slab weights
-    """
+class CAFEHG:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, get_study_pip, get_expected_weights, check_convergence
 
-    def __init__(self, LD, B, S, K, snp_ids=None, study_ids=None, tolerance=1e-5):
+    def __init__(self, X, Y, K, covariates=None, prior_variance=1.0, prior_pi=None, snp_ids=None, study_ids=None, sample_ids=None, tolerance=1e-5):
         """
-        blah
+        Y [T x M] expresion for study, individual
+        X [N x M] genotype for snp, individual
+            potentially [T x N x M] if study specific correction
+        prior_weight_variance [T, K]
+            prior variance for weight of (study, component) loading
+        prior_activity [K]
+            prior probability of sapling from slab in component k
+        prior_pi: prior for multinomial,
+            probability of sampling a snps as the active feature
         """
 
         # set data
-        self.LD = LD  # N x N
-        self.B = B  # T x N z scores
-        self.S = S  # T x N S from RSS likelihood
+        self.X = X
+        self.Y = Y
+
+        if covariates is not None:
+            self.covariates = covariates.fillna(0)
+        else:
+            self.covariates = None
+
         # set priors
-        T, N = B.shape
-        self.dims = {'N': N, 'T': T, 'K': K}
+        T, M = Y.shape
+        N = X.shape[0]
+        self.dims = {'N': N, 'M': M, 'T': T, 'K': K}
 
         self.study_ids = study_ids if (study_ids is not None) else np.arange(T)
         self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
+        self.sample_ids = sample_ids if (sample_ids is not None) else np.arange(M)
 
-        self.prior_precision = np.ones((T, K))
-        self.prior_pi = np.ones(N) / N
+        self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
         self.prior_activity = np.ones(K) * 0.5
+
         # initialize latent vars
         self.weight_means = np.zeros((T, K, N))
         self.weight_vars = np.ones((T, K, N))
         self.pi = np.ones((K, N)) / N
         self.active = np.ones((T, K))
 
+        if self.covariates is not None:
+            self.cov_weights = {
+                t: np.zeros(self.covariates.loc[t].shape[0])
+                for t in self.study_ids
+            }
+        else:
+            self.cov_weights = None
+
         # hyper-parameters
         self.a = 1e-10
         self.b = 1e-10
 
-        # variational paramters for (gamma-distributed) weight precisions
         self.weight_precision_a = np.ones((T, K))
         self.weight_precision_b = np.ones((T, K)) * 0.1
 
         self.weight_precision_a0 = np.ones((T, K))
-        self.weight_precision_b0 = np.ones((T, K)) * 0.0001
+        self.weight_precision_b0 = np.ones((T, K)) * 0.1
 
         self.c = 1e-10
         self.d = 1e-10
 
-        # variational paramters for (beta distributed) variance proportions
         self.study_precision_a = np.ones(T)
-        self.study_precision_b = np.ones(T)
+        self.study_precision_b = np.nanvar(Y, 1)
 
         self.elbos = []
         self.tolerance = tolerance
         self.run_time = 0
-        self.step_size = 1.0
+
+
+        masks = {t: ~np.isnan(self.Y[t]) for t in range(T)}
+        self.diags = np.array([
+            np.einsum('ij, ij->i',
+                self.X[:, masks[t]], self.X[:, masks[t]]) for t in range(T)])
+
+        if covariates is not None:
+            cov_pinv = {t: np.linalg.pinv(self.covariates.loc[t].values.T) for t in self.study_ids}
+        else:
+            cov_pinv = {}
 
         self.precompute = {
             'Hw': {},
             'Ew2': {},
             'first_moments': {},
-            'masks': {}
+            'masks': masks,
+            'cov_pinv': cov_pinv,
+            'covariate_prediction': {}
         }
-        self.records = {}
 
     @property
     def expected_study_precision(self):
         """
         expected precision for study under variational approximation
         """
-        # for now we will not mess with this
         return self.study_precision_a / self.study_precision_b
 
     @property
@@ -89,18 +116,9 @@ class CAFEH:
     @property
     def expected_weight_precision0(self):
         """
-        E[q(alpha | s=0)]
+        expected precision for weights under variational approximation
         """
-        #return self.weight_precision_a0 / self.weight_precision_b0
         return self.weight_precision_a / self.weight_precision_b
-
-
-    @property
-    def expected_effects(self):
-        """
-        computed expected effect size E[zw] [T, N]
-        """
-        return np.einsum('ijk,jk->ik', self.weight_means, self.pi)
 
     @property
     def expected_log_odds(self):
@@ -109,24 +127,13 @@ class CAFEH:
         """
         return np.log(self.prior_activity + 1e-10) - np.log(1 - self.prior_activity + 1e-10)
 
-    def compute_Hw(self, component):
+    @property
+    def expected_effects(self):
         """
-        compute entropy of q(w|z, active=1)
+        computed expected effect size E[zw] [T, N]
         """
-        if component not in self.precompute['Hw']:
-            v1 = self.weight_vars[:, component]
-            self.precompute['Hw'][component] = normal_entropy(v1)
-        return self.precompute['Hw'][component]
-
-    def compute_Ew2(self, component):
-        """
-        compute second moment of q(w|z, active=1)
-        """
-        if component not in self.precompute['Ew2']:
-            m1 = self.weight_means[:, component]
-            v1 = self.weight_vars[:, component]
-            self.precompute['Ew2'][component] = (m1**2 + v1)
-        return self.precompute['Ew2'][component]
+        return np.einsum('ijk,jk->ik',
+            self.weight_means * self.active[:, :, None], self.pi)
 
     @property
     def credible_sets(self):
@@ -141,150 +148,157 @@ class CAFEH:
         return minimum absolute correlation of snps in each credible set
         """
         return self.get_credible_sets()[1]
-        
+
+    def _get_mask(self, study):
+        """
+        nan mask to deal with missing values
+        """
+        return self.precompute['masks'][study]
+
+    def _get_diag(self, study):
+        """
+        get diag(X^T X) for a given study
+        differs for studys because of missingness in Y
+        """
+        return self.diags[study]
+
     def compute_first_moment(self, component):
         """
-        compute E[S^{-1}LD zws] for a component
+        compute E[Xzw] for a component
         """
 
         # if its not computed, compute now
         if component not in self.precompute['first_moments']:
-            self.precompute['first_moments'][component] = \
-                self._compute_first_moment_randomized(component)
+            pi = self.pi[component]
+            weight = self.weight_means[:, component]
+            active = self.active[:, component][:, None]
+            moment = ((pi * weight) @ self.X) * active
+            self.precompute['first_moments'][component] = moment
         return self.precompute['first_moments'][component]
 
-    def _compute_first_moment(self, component):
+    def compute_Hw(self, component):
         """
-        compute first moment
+        compute entropy of q(w|z, s=1)
         """
-        pi = self.pi[component]
-        weight = self.weight_means[:, component]
-        active = self.active[:, component]
-        moment = []
-        mu = pi[None] * weight * active[:, None]
-        m = (mu / self.S) @ self.LD * self.S
-        return m
+        if component not in self.precompute['Hw']:
+            v1 = self.weight_vars[:, component]
+            self.precompute['Hw'][component] = normal_entropy(v1)
+        return self.precompute['Hw'][component]
 
-    def _compute_first_moment_randomized(self, component, Q=100):
+    def compute_Ew2(self, component):
         """
-        compute estimate of first moment, sampling from q(z)
+        compute second moment of q(w |z, s=1)
         """
-        pi = self.pi[component]
-        active = self.active[:, component][:, None]
-        sample = np.random.choice(a=pi.size, size=Q, p=pi)
-        weight = self.weight_means[:, component, sample]
-        mu = (weight * active) / self.S[:, sample]
-        m = ((mu @ self.LD[sample]) * self.S) / Q
-        return m
+        if component not in self.precompute['Ew2']:
+            m1 = self.weight_means[:, component]
+            v1 = self.weight_vars[:, component]
+            self.precompute['Ew2'][component] = (m1**2 + v1)
+        return self.precompute['Ew2'][component]
 
-    def compute_study_constant(self, study):
+    def compute_covariate_prediction(self, compute=True):
         """
-        compute E[LDSDzw] for a component
+        predict from covariates
+        compute is a boolean of whether to predict or return 0
+            exists to clean up stuff in compute_prediction
         """
-        return np.zeros(self.dims['T'])[0]
 
-    def compute_prediction(self, k=None):
+        prediction = []
+        if (self.covariates is not None) and compute:
+            for i, study in enumerate(self.study_ids):
+                prediction.append(self.cov_weights[study] @ self.covariates.loc[study].values)
+            prediction = np.array(prediction)
+        else:
+            prediction = np.zeros_like(self.Y)
+        return prediction
+
+    def compute_prediction(self, k=None, use_covariates=True):
         """
         compute expected prediction
         """
-        prediction = np.sum([
+        prediction = self.compute_covariate_prediction(use_covariates)
+        prediction += np.sum([
             self.compute_first_moment(l) for l in range(self.dims['K']) if l != k
         ], axis=0)
         return prediction
 
-    def compute_residual(self, k=None):
+    def compute_residual(self, k=None, use_covariates=True):
         """
         computes expected residual
         """
-        prediction = self.compute_prediction(k)
-        return self.B - prediction
+        prediction = self.compute_prediction(k, use_covariates)
+        return self.Y - prediction
 
     def _compute_ERSS(self):
         """
         compute ERSS using XY and XX
         """
-        ERSS = np.array([self._compute_ERSS_study(t)
-            for t in range(self.dims['T'])])
+        covariate_residual = self.Y - self.compute_covariate_prediction()
+
+        ERSS = np.zeros(self.dims['T'])
+        for t in range(self.dims['T']):
+            mask = self._get_mask(t)
+            diag = self._get_diag(t)
+
+            active = self.active[t][:, None]  # Kx1
+            Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
+            m2pid = np.sum(active * Ew2 * diag * self.pi)
+            mupi = (self.weight_means[t] * active) * self.pi
+            mpX = (mupi) @ self.X[:, mask]
+
+            y = covariate_residual[t, mask]
+            ERSS[t] = np.inner(y, y)
+            ERSS[t] += -2 * np.inner(y, mpX.sum(0))
+            ERSS[t] += m2pid.sum() + np.sum(mpX.sum(0)**2) - np.sum(mpX**2)
         return ERSS
 
-    def _compute_ERSS_study(self, t):
-        diag = (self.S**-2)[t]  # N
-        active = self.active[t][:, None]  # Kx1
-        mupi = (self.weight_means[t] * active) * self.pi
-
-        ERSS = self.compute_study_constant(t)
-        ERSS += -2 * np.inner(self.B[t] * diag, mupi.sum(0))
-        ERSS += self._compute_quad_randomized(t)
-        return ERSS
-
-    def _compute_quad_randomized(self, t, Q=1):
-        sample = np.array([np.random.choice(
-            self.pi[0].size, Q, p=self.pi[k]) for k in range(self.dims['K'])]).T
-        diag = self.S[t]**-2
-        active = self.active[t]
-        total = []
-        for s in sample:
-            beta_s = (active * self.weight_means[t, np.arange(self.dims['K']), s]) / self.S[t, s]
-            var_beta = (self.weight_vars[t, np.arange(self.dims['K']), s] * active)
-            total.append((beta_s @ self.LD[s][:, s] @ beta_s)
-                         + (diag[s] * var_beta).sum())
-        return np.mean(total)
-
-    def _compute_quad(self, t):
-        diag = (self.S**-2)[t] # N
-        active = self.active[t][:, None]  # Kx1
-        mupi = (self.weight_means[t] * active) * self.pi
-
-        Ew2 = (self.weight_means[t]**2 + self.weight_vars[t])  #KxN
-        m2pid = np.sum(active * Ew2 * diag * self.pi)
-        mpSpm = (mupi/self.S[t]) @ self.LD @ (mupi/self.S[t]).T
-        total = m2pid.sum() + np.sum(mpSpm) - np.sum(np.diag(mpSpm))
-        return total
+    def _update_covariate_weights_study(self, residual, study):
+        """
+        update covariates
+        nans are masked with 0s-- same as filtering down to relevant
+        samples
+        """
+        Y = np.squeeze(residual[self.study_ids == study])
+        Y[np.isnan(Y)] = 0
+        pinvX = self.precompute['cov_pinv'][study]
+        self.cov_weights[study] = pinvX @ Y
 
     def _update_pi_component(self, k, residual=None):
         """
         update pi for a component
         """
-        diag = self.S**-2
+        mask = np.isnan(self.Y)
+        diag = self.diags
         if residual is None:
             r_k = self.compute_residual(k)
         else:
             r_k = residual
+        r_k[mask] = 0
 
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision[:, k][:, None]
         E_alpha0 = self.expected_weight_precision0[:, k][:, None]
 
+        E_tau = self.expected_study_precision[:, None]
         Ew2 = self.compute_Ew2(k)
         active = self.active[:, k][:, None]
 
-        # E[ln p(y | w, s, z, tau)]
-        tmp1 = -2 * r_k * self.weight_means[:, k] + Ew2
-        tmp1 = -0.5 * self.expected_study_precision[:, None] \
-            * tmp1 * diag * active
+        # E[ln p(y | w, z, alpha , tau)]
+        tmp1 = -2 * r_k @ self.X.T * self.weight_means[:, k] \
+            + diag * Ew2
+        tmp1 = -0.5 * E_tau * tmp1 * active
 
         # E[ln p(w | alpha)] + H(q(w))
-        Ew2 = Ew2 * active + (1 / E_alpha0) * (1 - active)
+        Ew2 = Ew2 * active + (1 / E_alpha) * (1 - active)
         entropy = self.compute_Hw(k)
-        entropy = entropy * active + \
-            normal_entropy(1 / E_alpha0) * (1 - active)
-        lik = (- 0.5 * E_alpha * Ew2)  # [T, N]
+        entropy = entropy * active + normal_entropy(1 / E_alpha0) * (1 - active)
 
+        lik = (- 0.5 * E_alpha * Ew2)  # [T, N]
         pi_k = (tmp1 + lik + entropy)
         pi_k = pi_k.sum(0)
         pi_k += np.log(self.prior_pi)
         pi_k = np.exp(pi_k - pi_k.max())
         pi_k = pi_k / pi_k.sum()
-
-        # stochastic variational update
-        if self.step_size < 1:
-            natural_old = np.log(self.pi[k]) - np.log(self.pi[k, -1] + 1e-10)
-            nautral_new = np.log(pi_k) - np.log(pi_k[-1] + 1e-10)
-            natural_updated = (1 - self.step_size) * natural_old \
-                + self.step_size * nautral_new
-            pi_k = np.exp(natural_updated - natural_updated.max())
-            pi_k = pi_k / pi_k.sum()
 
         # update parameters
         self.pi[k] = pi_k
@@ -304,7 +318,6 @@ class CAFEH:
         for k in components:
             self._update_pi_component(k)
 
-
     def update_ARD_weights(self, k):
         """
         ARD update for weights
@@ -315,42 +328,26 @@ class CAFEH:
         second_moment = Ew2 @ self.pi[k]
         alpha = self.a + 0.5
         beta = self.b + second_moment / 2
-
-        if self.step_size < 1:
-            alpha = (1 - self.step_size) * self.weight_precision_a[:, k] + \
-                self.step_size * alpha
-            beta = (1 - self.step_size) * self.weight_precision_b[:, k] + \
-                self.step_size * beta
-
         self.weight_precision_a[:, k] = alpha
         self.weight_precision_b[:, k] = beta
 
-    def _update_weight_component(self, k, ARD=True, residual=None):
+    def _update_weight_component(self, k, residual=None):
         """
         update weights for a component
         """
-        diag = self.S**-2
+        mask = np.isnan(self.Y)
+        diag = self.diags
         if residual is None:
             r_k = self.compute_residual(k)
         else:
             r_k = residual
+        r_k[mask] = 0
 
         precision = diag * self.expected_study_precision[:, None] \
             + self.expected_weight_precision[:, k][:, None]
         variance = 1 / precision  # [T, N]
         mean = (variance * self.expected_study_precision[:, None]) \
-            * (r_k * diag)
-
-        # stochastic optimization
-        # do gradient ascent in natural parameter space
-        if self.step_size < 1:
-            eta1_old, eta2_old = centered_moment2natural(self.weight_means[:, k], self.weight_vars[:, k])
-            eta1_new, eta2_new = centered_moment2natural(mean, variance)
-
-            eta1_updated = (1 - self.step_size) * eta1_old  +  self.step_size * eta1_new
-            eta2_updated = (1 - self.step_size) * eta2_old  +  self.step_size * eta2_new
-            mean, variance = natural2centered_moment(eta1_updated, eta2_updated)
-
+            * (r_k @ self.X.T)
 
         # update params
         self.weight_vars[:, k] = variance
@@ -375,33 +372,27 @@ class CAFEH:
         """
         update active
         """
-        diag = self.S**-2  # T x N
+        diag = self.diags  # T x N
+        E_alpha = self.expected_weight_precision[:, k]
+        E_alpha0 = self.expected_weight_precision0[:, k]
+
         r_k = self.compute_residual(k)
-        p_k = self.pi[k][None] * self.weight_means[:, k]
-        tmp1 = -2 * np.einsum('ij,ij->i', r_k * diag, p_k) \
+        r_k[np.isnan(self.Y)] = 0
+        p_k = self.compute_first_moment(k) / self.active[:, k][:, None]
+
+        tmp1 = -2 * np.einsum('ij,ij->i', r_k, p_k) \
             + (self.compute_Ew2(k) * diag) @ self.pi[k]
         tmp1 = -0.5 * self.expected_study_precision * tmp1
-
-        tmp2 = -0.5 * self.expected_weight_precision[:, k] \
+        tmp2 = -0.5 * E_alpha \
             * (self.compute_Ew2(k) @ self.pi[k]) \
             + normal_entropy(self.weight_vars[:, k]) @ self.pi[k]
 
         a = tmp1 + tmp2
-        b = -0.5 + normal_entropy(1 / self.expected_weight_precision0[:, k])
-        active_k = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
-
-        # stochastic variational update
-        if self.step_size < 1:
-            natural_old = np.log(1 - self.active[:, k] + 1e-10) - np.log(self.active[:, k] + 1e-10)
-            natural_new = b - a - self.expected_log_odds[k]
-
-            natural_updated = (1 - self.step_size) * natural_old \
-                + self.step_size * natural_new
-
-            active_k = 1 / (np.exp(natural_updated) + 1)
+        b = -0.5 + normal_entropy(1 / E_alpha0)
 
         # update params
-        self.active[:, k] = active_k
+        self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
+
         # pop precomputes
         self.precompute['first_moments'].pop(k, None)
         self.precompute['Hw'].pop(k, None)
@@ -411,7 +402,24 @@ class CAFEH:
         """
         update tau, controls study specific variance
         """
-        pass
+        if residual is None:
+            residual = self.compute_residual()
+        ERSS = self._compute_ERSS()
+
+        n_samples = np.array([
+            self._get_mask(t).sum() for t in range(self.dims['T'])
+        ])
+        self.study_precision_a = self.c + n_samples / 2
+        self.study_precision_b = self.d + ERSS / 2
+
+    def update_covariate_weights(self):
+        """
+        update covariates
+        """
+        if self.covariates is not None:
+            residual = self.compute_residual(use_covariates=False)
+            for study in self.study_ids:
+                self._update_covariate_weights_study(residual, study)
 
     def fit(self, max_iter=1000, verbose=False, components=None, **kwargs):
         """
@@ -422,20 +430,24 @@ class CAFEH:
             components = np.arange(self.dims['K'])
 
         for i in range(max_iter):
+            # update covariate weights
+            if (self.covariates is not None) and kwargs.get('update_covariate_weights', True):
+                self.update_covariate_weights()
+
             # update component parameters
             for l in components:
                 if kwargs.get('ARD_weights', False):
                     self.update_ARD_weights(l)
-                if kwargs.get('update_weights', True):
+                if kwargs.get('update_weights', False):
                     self._update_weight_component(l)
-                if kwargs.get('update_pi', True):
+                if kwargs.get('update_pi', False):
                     self._update_pi_component(l)
                 if kwargs.get('update_active', False):
                     self._update_active_component(l)
 
             # update variance parameters
-            #if update_variance:
-            #    self.update_study_variance()
+            if kwargs.get('update_variance', False):
+                self.update_study_variance()
 
             # monitor convergence with ELBO
             self.elbos.append(self.compute_elbo())
@@ -452,7 +464,7 @@ class CAFEH:
         if verbose:
             print('cumulative run time: {}'.format(self.run_time))
 
-    def compute_elbo(self):
+    def compute_elbo(self, residual=None):
         """
         copute evidence lower bound
         """
@@ -469,13 +481,15 @@ class CAFEH:
 
         ERSS = self._compute_ERSS()
         for study in range(self.dims['T']):
+            mask = self._get_mask(study)
             expected_conditional += \
-                - 0.5 * self.dims['N'] * np.log(2 * np.pi) \
-                + 0.5 * self.dims['N'] * E_ln_tau[study] \
+                - 0.5 * mask.sum() * np.log(2 * np.pi) \
+                + 0.5 * mask.sum() * E_ln_tau[study] \
                 - 0.5 * E_tau[study] * ERSS[study]
 
         Ew2 = np.array([self.compute_Ew2(k) for k in range(self.dims['K'])])
         Ew2 = np.einsum('jik,jk->ij', Ew2, self.pi)
+        Ew2 = Ew2 * self.active + (1 - self.active) / E_alpha0
 
         Hw = np.array([self.compute_Hw(k) for k in range(self.dims['K'])])
         entropy = np.einsum('jik,jk->ij', Hw, self.pi)
@@ -484,9 +498,10 @@ class CAFEH:
         lik = (
             - 0.5 * np.log(2 * np.pi)
             + 0.5 * E_ln_alpha
-            - 0.5 * E_alpha * Ew2 * active
-            - 0.5 *  (1 - active)
+            - 0.5 * E_alpha * Ew2 * self.active
+            - 0.5 * (1 - self.active)
         )
+
         KL -= lik.sum() + entropy.sum()
 
         KL += (gamma_kl(self.weight_precision_a, self.weight_precision_b, self.a, self.b) * active).sum()
@@ -508,16 +523,17 @@ class CAFEH:
         ld matrix for subset of snps
         snps: integer index into snp_ids
         """
-        return self.LD[snps][:, snps]
+        return np.atleast_2d(np.corrcoef(self.X[snps.astype(int)]))
 
     def compute_weight_variance(self, k):
         """
         compute weight variance parameters, need S and fit parameters
         """
-        diag = self.S**-2
+        diag = self.diags
         precision = diag * self.expected_study_precision[:, None] \
             + self.expected_weight_precision[:, k][:, None]
-        return 1/precision
+        variance = 1 / precision  # [T, N]
+        return variance
 
     def _get_compress_mask(self):
         """
@@ -548,7 +564,7 @@ class CAFEH:
         self.weight_means = weight_means
         self.weight_vars = weight_vars
 
-    def save(self, save_path, save_ld=False, save_data=False):
+    def save(self, save_path, save_data=False):
         """
         save the model
         """
@@ -561,20 +577,17 @@ class CAFEH:
         for key in self.precompute:
             self.precompute[key] = {}
 
-        if not save_ld:
-            LD = self.__dict__.pop('LD')
-
         if not save_data:
-            B = self.__dict__.pop('B')
+            X = self.__dict__.pop('X')
+            Y = self.__dict__.pop('Y')
+            cov = self.__dict__.pop('covariates')
 
         self._compress_model()
         pickle.dump(self, open(save_path, 'wb'))
-
-        # add back model data
-        if not save_ld:
-            self.__dict__['LD'] = LD
-
-        if not save_data:
-            self.__dict__['B'] = B
         self._decompress_model()
 
+        # add back model data
+        if not save_data:
+            self.__dict__['X'] = X
+            self.__dict__['Y'] = Y
+            self.__dict__['covariates'] = cov
