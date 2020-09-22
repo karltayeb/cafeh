@@ -118,7 +118,7 @@ class CAFEHG:
         """
         expected precision for weights under variational approximation
         """
-        return self.weight_precision_a / self.weight_precision_b
+        return self.weight_precision_a0 / self.weight_precision_b0
 
     @property
     def expected_log_odds(self):
