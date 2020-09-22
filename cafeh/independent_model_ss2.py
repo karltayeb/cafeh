@@ -375,14 +375,18 @@ class CAFEHG:
         diag = self.diags  # T x N
         E_tau = self.expected_study_precision
 
-        E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
+        E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
+            - np.log(self.weight_precision_b[:, k])
         E_alpha = self.expected_weight_precision
-        H_alpha = gamma_entropy(self.weight_precision_a, self.weight_precision_b)
+        H_alpha = gamma_entropy(
+            self.weight_precision_a[:, k], self.weight_precision_b[:, k])
 
 
-        E_ln_alpha0 = digamma(self.weight_precision_a0) - np.log(self.weight_precision_b0)
+        E_ln_alpha0 = digamma(self.weight_precision_a0[:, k]) \
+            - np.log(self.weight_precision_b0[:, k])
         E_alpha0 = self.expected_weight_precision0
-        H_alpha0 = gamma_entropy(self.weight_precision_a0, self.weight_precision_b0)
+        H_alpha0 = gamma_entropy(
+            self.weight_precision_a0, self.weight_precision_b0)
 
         r_k = self.compute_residual(k)
         r_k[np.isnan(self.Y)] = 0
