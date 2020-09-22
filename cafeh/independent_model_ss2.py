@@ -386,7 +386,7 @@ class CAFEHG:
             - np.log(self.weight_precision_b0[:, k])
         E_alpha0 = self.expected_weight_precision0[:, k]
         H_alpha0 = gamma_entropy(
-            self.weight_precision_a0, self.weight_precision_b0)
+            self.weight_precision_a0[:, k], self.weight_precision_b0[:, k])
 
         r_k = self.compute_residual(k)
         r_k[np.isnan(self.Y)] = 0
