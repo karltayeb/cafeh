@@ -18,6 +18,9 @@ def gamma_kl(a_q, b_q, a_p, b_p):
         + a_p * (np.log(b_q) - np.log(b_p)) + a_q * (b_p - b_q) / b_q
     return KL
 
+def gamma_entropy(a, b):
+    return a - np.log(b) + loggamma(a) + (1 - a) * digamma(a)
+    
 def normal_entropy(var):
     entropy = (1 / 2) * np.log(2 * np.pi * var) + 1
     return entropy
