@@ -1,9 +1,9 @@
 import numpy as np
 from scipy.stats import norm
-from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl, normal_entropy, gamma_kl
+from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl, normal_entropy, gamma_kl, gamma_entropy
 import os, sys, pickle
 from scipy.special import digamma
-from .utils import np_cache_class, gamma_logpdf
+from .utils import gamma_logpdf
 from functools import lru_cache
 import time
 
@@ -373,8 +373,16 @@ class CAFEHG:
         update active
         """
         diag = self.diags  # T x N
-        E_alpha = self.expected_weight_precision[:, k]
-        E_alpha0 = self.expected_weight_precision0[:, k]
+        E_tau = self.expected_study_precision
+
+        E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
+        E_alpha = self.expected_weight_precision
+        H_alpha = gamma_entropy(self.weight_precision_a, self.weight_precision_b)
+
+
+        E_ln_alpha0 = digamma(self.weight_precision_a0) - np.log(self.weight_precision_b0)
+        E_alpha0 = self.expected_weight_precision0
+        H_alpha0 = gamma_entropy(self.weight_precision_a0, self.weight_precision_b0)
 
         r_k = self.compute_residual(k)
         r_k[np.isnan(self.Y)] = 0
@@ -382,13 +390,13 @@ class CAFEHG:
 
         tmp1 = -2 * np.einsum('ij,ij->i', r_k, p_k) \
             + (self.compute_Ew2(k) * diag) @ self.pi[k]
-        tmp1 = -0.5 * self.expected_study_precision * tmp1
+        tmp1 = -0.5 * E_tau * tmp1
         tmp2 = -0.5 * E_alpha \
             * (self.compute_Ew2(k) @ self.pi[k]) \
             + normal_entropy(self.weight_vars[:, k]) @ self.pi[k]
 
-        a = tmp1 + tmp2
-        b = -0.5 + normal_entropy(1 / E_alpha0)
+        a = 0.5 * E_ln_alpha + tmp1 + tmp2 + H_alpha
+        b = 0.5 * E_ln_alpha0 -0.5 + normal_entropy(1 / E_alpha0) + H_alpha0
 
         # update params
         self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))
@@ -474,6 +482,8 @@ class CAFEHG:
         active = self.active
         E_ln_alpha = digamma(self.weight_precision_a) - np.log(self.weight_precision_b)
         E_alpha = self.expected_weight_precision
+
+        E_ln_alpha0 = digamma(self.weight_precision_a0) - np.log(self.weight_precision_b0)
         E_alpha0 = self.expected_weight_precision0
 
         E_ln_tau = digamma(self.study_precision_a) - np.log(self.study_precision_b)
