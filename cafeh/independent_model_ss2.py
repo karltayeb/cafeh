@@ -377,14 +377,14 @@ class CAFEHG:
 
         E_ln_alpha = digamma(self.weight_precision_a[:, k]) \
             - np.log(self.weight_precision_b[:, k])
-        E_alpha = self.expected_weight_precision
+        E_alpha = self.expected_weight_precision[:, k]
         H_alpha = gamma_entropy(
             self.weight_precision_a[:, k], self.weight_precision_b[:, k])
 
 
         E_ln_alpha0 = digamma(self.weight_precision_a0[:, k]) \
             - np.log(self.weight_precision_b0[:, k])
-        E_alpha0 = self.expected_weight_precision0
+        E_alpha0 = self.expected_weight_precision0[:, k]
         H_alpha0 = gamma_entropy(
             self.weight_precision_a0, self.weight_precision_b0)
 
