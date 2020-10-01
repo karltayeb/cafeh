@@ -29,6 +29,31 @@ def weight_ard_active_fit_procedure(model, **kwargs):
     model.fit(**fit_args)
 
 
+def weight_active_fit_procedure(model, **kwargs):
+    """
+    fit procedure w/o spike and slab
+    first fit weights for good initialization
+    then fit spike and slab
+    """
+    # fit weights w/o ard to initialize
+    fit_args = dict(
+        max_iter=50, update_active=False,
+        update_weights=True, update_pi=True,
+        ARD_weights=False
+    )
+    fit_args.update(kwargs)
+    model.fit(**fit_args)
+
+    # fit with active
+    fit_args = dict(
+        max_iter=1000, update_active=True,
+        update_weights=True, update_pi=True,
+        ARD_weights=True
+    )
+    fit_args.update(kwargs)
+    model.fit(**fit_args)
+
+
 def forward_fit_procedure(model, **kwargs):
     print('forward fit procedure')
     """
