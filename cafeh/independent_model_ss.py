@@ -7,6 +7,7 @@ from .utils import np_cache_class, gamma_logpdf
 from functools import lru_cache
 import time
 
+
 class CAFEHG:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_pip, get_study_pip, get_expected_weights, check_convergence
@@ -95,6 +96,11 @@ class CAFEHG:
             'cov_pinv': cov_pinv,
             'covariate_prediction': {}
         }
+
+    def clear_precompute(self):
+        self.precompute['Hw'] = {}
+        self.precompute['Ew2'] = {}
+        self.precompute['first_moments'] = {}
 
     @property
     def expected_study_precision(self):
