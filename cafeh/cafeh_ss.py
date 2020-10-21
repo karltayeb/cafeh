@@ -68,6 +68,11 @@ class CAFEH:
         }
         self.records = {}
 
+    def clear_precompute(self):
+        self.precompute['Hw'] = {}
+        self.precompute['Ew2'] = {}
+        self.precompute['first_moments'] = {}
+
     @property
     def expected_study_precision(self):
         """
