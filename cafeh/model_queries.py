@@ -35,8 +35,16 @@ def _get_cs(pi, alpha):
 
 def get_credible_sets(self, alpha=0.95):
     """
-    return cs and purity for each component
-    alpha the credible set posterior mass
+    return {k: credible_set}
+    """
+    credible_sets = {k: _get_cs(
+        self.pi[k], alpha) for k in range(self.dims['K'])}
+    return credible_sets
+
+def get_purity(self, alpha=0.95):
+    """
+    compute purity of credible credible sets
+    if the cs contains > 100 SNPs compute from random sample of 100 SNPs
     """
     credible_sets = {k: _get_cs(self.pi[k], alpha) for k in range(self.dims['K'])}
     purity = {}
@@ -65,6 +73,48 @@ def get_pip(self):
     # compute pip
     pip = 1 - np.exp(np.sum(np.log((1 - self.pi * active[:, None] + 1e-100)), 0))
     return pip
+
+
+def summary_table(model):
+    """
+    map each variant to its top component
+    report alpha, rank, pi, effect, effect_var in top component
+    report p_active (component level stat) and pip (variant level stat)
+    """
+
+    study_pip = model.get_study_pip().T
+    table = study_pip.reset_index().melt(id_vars='index').rename(columns={
+        'index': 'variant_id',
+        'variable': 'study',
+        'value': 'pip' 
+    })
+
+    top_component = pd.Series(model.pi.argmax(0), index=model.snp_ids).to_dict()
+    table.loc[:, 'top_component'] = table.variant_id.apply(lambda x: top_component.get(x))
+
+    minalpha = get_minalpha(model).to_dict()
+    table.loc[:, 'alpha'] = [minalpha.get(k).get(v) for k, v in zip(table.top_component.values, table.variant_id.values)]
+
+    rank = pd.DataFrame({k: np.argsort(np.flip(np.argsort(model.pi[k]))) for k in range(model.dims['K'])}, index=model.snp_ids).to_dict()
+    table.loc[:, 'rank'] = [rank.get(k).get(v) for k, v in zip(table.top_component.values, table.variant_id.values)]
+
+    active = pd.DataFrame(model.active, index=model.study_ids)
+    active.loc['all'] = (model.active.max(0) > 0.5).astype(int)
+    active = active.to_dict()
+    table.loc[:, 'p_active'] = [active.get(k).get(s) for k, s in zip(table.top_component.values, table.study.values)]
+
+    pi = pd.Series(model.pi.max(0), index=model.snp_ids).to_dict()
+    table.loc[:, 'pi'] = table.variant_id.apply(lambda x: pi.get(x))
+    small_table = table[table.p_active > 0.5]#.sort_values(by=['chr', 'start'])
+
+    # add effect size and variance
+    study2idx = {s: i for i, s in enumerate(model.study_ids)}
+    var2idx = {s: i for i, s in enumerate(model.snp_ids)}
+    small_table.loc[:, 'effect'] = [model.weight_means[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
+        small_table.study, small_table.variant_id, small_table.top_component)]
+    small_table.loc[:, 'effect_var'] = [model.weight_vars[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
+        small_table.study, small_table.variant_id, small_table.top_component)]
+    return small_table
 
 def get_component_coloc(self):
     """
