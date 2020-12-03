@@ -75,6 +75,23 @@ def get_pip(self):
     return pip
 
 
+def _get_minalpha(pi):
+    """
+    report the minimum alpha value to include this snp in cs
+    """
+    argsort = np.flip(np.argsort(pi))
+    resort = np.argsort(argsort)
+    cumsum = np.cumsum(pi[argsort])
+    minalpha = np.roll(cumsum, 1)
+    minalpha[0] = 0
+    return minalpha[resort]
+
+def get_minalpha(model):
+    return  pd.DataFrame(
+        np.array([_get_minalpha(model.pi[k]) for k in range(model.dims['K'])]).T,
+        index=model.snp_ids
+    )
+
 def summary_table(model):
     """
     map each variant to its top component
