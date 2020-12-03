@@ -124,6 +124,11 @@ def summary_table(model):
     table.loc[:, 'pi'] = table.variant_id.apply(lambda x: pi.get(x))
     small_table = table[table.p_active > 0.5]#.sort_values(by=['chr', 'start'])
 
+
+    table.loc[:, 'chr'] = table.variant_id.apply(lambda x: x.split('_')[0])
+    table.loc[:, 'start'] = table.variant_id.apply(lambda x: int(x.split('_')[1]))
+    table.loc[:, 'end'] = table.start + 1
+
     # add effect size and variance
     study2idx = {s: i for i, s in enumerate(model.study_ids)}
     var2idx = {s: i for i, s in enumerate(model.snp_ids)}
