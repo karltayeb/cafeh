@@ -92,7 +92,7 @@ def get_minalpha(model):
         index=model.snp_ids
     )
 
-def summary_table(model):
+def summary_table(model, filter_variants=True):
     """
     map each variant to its top component
     report alpha, rank, pi, effect, effect_var in top component
@@ -122,16 +122,18 @@ def summary_table(model):
 
     pi = pd.Series(model.pi.max(0), index=model.snp_ids).to_dict()
     table.loc[:, 'pi'] = table.variant_id.apply(lambda x: pi.get(x))
-    small_table = table[table.p_active > 0.5]#.sort_values(by=['chr', 'start'])
+
+    if filter_variants:
+        table = table[table.p_active > 0.5] #.sort_values(by=['chr', 'start'])
 
     # add effect size and variance
     study2idx = {s: i for i, s in enumerate(model.study_ids)}
     var2idx = {s: i for i, s in enumerate(model.snp_ids)}
-    small_table.loc[:, 'effect'] = [model.weight_means[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
-        small_table.study, small_table.variant_id, small_table.top_component)]
-    small_table.loc[:, 'effect_var'] = [model.weight_vars[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
-        small_table.study, small_table.variant_id, small_table.top_component)]
-    return small_table
+    table.loc[:, 'effect'] = [model.weight_means[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
+        table.study, table.variant_id, table.top_component)]
+    table.loc[:, 'effect_var'] = [model.weight_vars[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
+        table.study, table.variant_id, table.top_component)]
+    return table
 
 def get_component_coloc(self):
     """
