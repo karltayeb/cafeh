@@ -135,6 +135,29 @@ def summary_table(model, filter_variants=True):
         table.study, table.variant_id, table.top_component)]
     return table
 
+
+def coloc_table(model, phenotype, **kwargs):
+    """
+    
+    generate a table giving colocalization with respect to a particular phenotype
+    model: cafeh instance
+    phenotype: phenotype_id we want to generte coloc table from
+    """
+    p_active = pd.DataFrame(model.active, index=model.study_ids)
+    p_active = p_active.reset_index().melt(id_vars='index')
+
+    p_coloc = pd.DataFrame((model.active * model.active[model.study_ids==phenotype]), index=model.study_ids)
+    p_coloc = p_coloc.reset_index().melt(id_vars='index')
+
+    p_active.loc[:, 'p_coloc'] = p_coloc.value
+    p_active = p_active.rename(columns={'index': 'tissue', 'variable': 'component', 'value': 'p_active'})
+
+    p_active.loc[:, 'phenotype'] = phenotype
+    for key, val in kwargs.items():
+        p_active.loc[:, key] = val
+    return p_active
+
+
 def get_component_coloc(self):
     """
     returns K x T x T matrix for probability of colocalization of two studys in a component
