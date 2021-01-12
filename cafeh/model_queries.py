@@ -124,7 +124,9 @@ def summary_table(model, filter_variants=True):
     table.loc[:, 'pi'] = table.variant_id.apply(lambda x: pi.get(x))
 
     if filter_variants:
-        table = table[table.p_active > 0.5] #.sort_values(by=['chr', 'start'])
+        rank = model.pi.max(0).argsort().argsort()
+        min_snps = model.snp_ids[rank[-100:]]
+        table = table[(table.p_active > 0.5) | (table.variant_id.isin(min_snps))] #.sort_values(by=['chr', 'start'])
 
     # add effect size and variance
     study2idx = {s: i for i, s in enumerate(model.study_ids)}
@@ -138,7 +140,6 @@ def summary_table(model, filter_variants=True):
 
 def coloc_table(model, phenotype, **kwargs):
     """
-    
     generate a table giving colocalization with respect to a particular phenotype
     model: cafeh instance
     phenotype: phenotype_id we want to generte coloc table from
