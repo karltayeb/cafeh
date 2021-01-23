@@ -392,15 +392,18 @@ class CAFEHG:
         r_k[np.isnan(self.Y)] = 0
         p_k = self.compute_first_moment(k) / self.active[:, k][:, None]
 
-        tmp1 = -2 * np.einsum('ij,ij->i', r_k, p_k) \
+        lik = -2 * np.einsum('ij,ij->i', r_k, p_k) \
             + (self.compute_Ew2(k) * diag) @ self.pi[k]
-        tmp1 = -0.5 * E_tau * tmp1
-        tmp2 = -0.5 * E_alpha \
-            * (self.compute_Ew2(k) @ self.pi[k]) \
-            + normal_entropy(self.weight_vars[:, k]) @ self.pi[k]
 
-        a = 0.5 * E_ln_alpha + tmp1 + tmp2 + H_alpha
-        b = 0.5 * E_ln_alpha0 -0.5 + normal_entropy(1 / E_alpha0) + H_alpha0
+        kl = normal_kl(model.weight_means[:, k], model.weight_vars[:, k],
+            np.zeros_like(E_alpha)[:, None], (1/E_alpha[:, None]))
+        kl = kl @ self.pi[k] - 0.5 * np.log(E_alpha) + 0.5 * E_ln_alpha + \
+            gamma_kl(self.weight_precision_a[:, k],
+                self.weight_precision_b[:, k], self.a, self.b)
+
+        a = -0.5 * E_tau * lik - kl
+        b = - gamma_kl(self.weight_precision_a0[:, k],
+            self.weight_precision_b0[:, k], self.a, self.b)
 
         # update params
         self.active[:, k] = 1 / (1 + np.exp(b - a - self.expected_log_odds[k]))

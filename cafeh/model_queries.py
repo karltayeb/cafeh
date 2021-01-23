@@ -59,7 +59,7 @@ def get_purity(self, alpha=0.95):
             LD = self.get_ld(cs)
             purity[k] = np.min(np.abs(LD))
 
-    return credible_sets, purity
+    return purity
 
 def get_study_pip(self):
     pip = []

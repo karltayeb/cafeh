@@ -10,7 +10,7 @@ import time
 
 class CAFEHG:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip, get_study_pip, get_expected_weights, check_convergence
+    from .model_queries import get_credible_sets, get_purity, get_pip, get_study_pip, get_expected_weights, check_convergence
 
     def __init__(self, X, Y, K, covariates=None, prior_variance=1.0, prior_pi=None, snp_ids=None, study_ids=None, sample_ids=None, tolerance=1e-5):
         """
@@ -136,14 +136,14 @@ class CAFEHG:
         """
         return credible sets
         """
-        return self.get_credible_sets()[0]
+        return self.get_credible_sets()
 
     @property
     def purity(self):
         """
         return minimum absolute correlation of snps in each credible set
         """
-        return self.get_credible_sets()[1]
+        return self.get_purity()
 
     def _get_mask(self, study):
         """

@@ -13,7 +13,7 @@ class CAFEH:
     CAFEH RSS estimate of CAFEH-G with spike and slab weights
     """
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
-    from .model_queries import get_credible_sets, get_pip, get_study_pip, get_expected_weights, check_convergence
+    from .model_queries import get_credible_sets, get_purity, get_pip, get_study_pip, get_expected_weights, check_convergence
 
     def __init__(self, LD, B, S, K, snp_ids=None, study_ids=None, tolerance=1e-5):
         """
@@ -126,14 +126,14 @@ class CAFEH:
         """
         return credible sets
         """
-        return self.get_credible_sets()[0]
+        return self.get_credible_sets()
 
     @property
     def purity(self):
         """
         return minimum absolute correlation of snps in each credible set
         """
-        return self.get_credible_sets()[1]
+        return self.get_purity()
         
     def compute_first_moment(self, component):
         """
