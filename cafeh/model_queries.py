@@ -7,6 +7,9 @@ from .kls import unit_normal_kl, normal_kl, categorical_kl
 # MODEL QUERY FUNCTIONS #
 #########################
 def check_convergence(self):
+    """
+    check if ELBO has converged
+    """
     if len(self.elbos) > 2:
         delta = np.abs((self.elbos[-1] - self.elbos[-2]) / self.elbos[-2])
         if delta < self.tolerance:
@@ -15,6 +18,9 @@ def check_convergence(self):
         return False
 
 def get_expected_weights(self):
+    """
+    return 
+    """
     if self.weight_means.ndim == 2:
         weights = self.weight_means * self.active
     else:
@@ -23,19 +29,30 @@ def get_expected_weights(self):
 
 def get_top_snp_per_component(self):
     """
-    returns snp with highest posterior probability for each component
-    returns p(max_snp) for each components
+    return values
+    snp: [k] array with highest posterior probability snp per components
+    prob: [k] posterior probability of top snp in each component
     """
     return self.snp_ids[self.pi.T.argmax(axis=0)], self.pi.T.max(axis=0)
 
 def _get_cs(pi, alpha):
+    """
+    pi: [p] vector of posterior probabilities for a single component
+    alpha: target coverage of credible set
+
+    return: array of indices for minimal set of SNPs achieving target coverage
+    """
     argsort = np.flip(np.argsort(pi))
     cset_size = (np.cumsum(pi[argsort]) < alpha).sum() + 1
     return argsort[:cset_size]
 
 def get_credible_sets(self, alpha=0.95):
     """
-    return {k: credible_set}
+    get credible sets for each compnent at target coverage alpha
+    each credible set consists of aa minimal set of SNPs with total posterior
+    mass exceeding target coverage.
+
+    returns a dictionary {k: indices of snps in kth credible set}
     """
     credible_sets = {k: _get_cs(
         self.pi[k], alpha) for k in range(self.dims['K'])}
@@ -74,10 +91,18 @@ def get_pip(self):
     pip = 1 - np.exp(np.sum(np.log((1 - self.pi * active[:, None] + 1e-100)), 0))
     return pip
 
-
 def _get_minalpha(pi):
     """
-    report the minimum alpha value to include this snp in cs
+    compute minimum coverage level of credible set to include each snp.
+    this function is useful to quickly compute credible sets with different 
+    target coverage levels
+
+    arguments:
+    pi: [p] array of posterior probabilities
+
+    returns:
+    minalpha: [p] array with the minimum coverage level required to include
+        each snp in the credible set
     """
     argsort = np.flip(np.argsort(pi))
     resort = np.argsort(argsort)
@@ -87,16 +112,34 @@ def _get_minalpha(pi):
     return minalpha[resort]
 
 def get_minalpha(model):
+    """
+    returns data frame with p rows and K columns
+    minalpha.loc[snp, k] gives the minimum coverage level
+    to include snp in the credible set of component k
+    """
     return  pd.DataFrame(
         np.array([_get_minalpha(model.pi[k]) for k in range(model.dims['K'])]).T,
         index=model.snp_ids
     )
 
-def summary_table(model, filter_variants=True):
+def summary_table(model, filter_variants=True, max_snps=500, min_p_active=0.5):
     """
     map each variant to its top component
-    report alpha, rank, pi, effect, effect_var in top component
-    report p_active (component level stat) and pip (variant level stat)
+
+    returns pd.DataFrame with columns
+        variant_id
+        study
+        pip
+        top_component: the component with the most posterior mass on the variant
+        alpha: the minimum coverage to include the variant in the credible set of top_component
+        rank: the rank of the snp in top_component
+        p_active: the posterior probability that top_component is active in study
+        pi: the posterior probability that the variant is the variant selected by component top_component
+        effect: the posterior mean of w_{study, top_component} conditioned on top_component selecting the snp
+        effect_var: posterior variance of w_{study, top_component} conditioned on top_component selecting the snp
+
+    if filter_variants is True the returned table to filtered to only max_snps,
+    and only report study, component pairs with p_active > min_p_active
     """
 
     study_pip = model.get_study_pip().T
@@ -116,25 +159,26 @@ def summary_table(model, filter_variants=True):
     table.loc[:, 'rank'] = [rank.get(k).get(v) for k, v in zip(table.top_component.values, table.variant_id.values)]
 
     active = pd.DataFrame(model.active, index=model.study_ids)
-    active.loc['all'] = (model.active.max(0) > 0.5).astype(int)
     active = active.to_dict()
-    table.loc[:, 'p_active'] = [active.get(k).get(s) for k, s in zip(table.top_component.values, table.study.values)]
+    table.loc[:, 'p_active'] = [
+        active.get(k).get(s) for k, s in
+        zip(table.top_component.values, table.study.values)
+    ]
 
     pi = pd.Series(model.pi.max(0), index=model.snp_ids).to_dict()
     table.loc[:, 'pi'] = table.variant_id.apply(lambda x: pi.get(x))
 
     if filter_variants:
         rank = model.pi.max(0).argsort().argsort()
-        min_snps = model.snp_ids[rank[-100:]]
-        table = table[(table.p_active > 0.5) | (table.variant_id.isin(min_snps))] #.sort_values(by=['chr', 'start'])
+        min_snps = model.snp_ids[rank[-max_snps:]]
+        table = table[(table.p_active > min_p_active) & (table.variant_id.isin(min_snps))]
 
     # add effect size and variance
     study2idx = {s: i for i, s in enumerate(model.study_ids)}
     var2idx = {s: i for i, s in enumerate(model.snp_ids)}
     table.loc[:, 'effect'] = [model.weight_means[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
         table.study, table.variant_id, table.top_component)]
-    table.loc[:, 'effect_var'] = [model.weight_vars[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(
-        table.study, table.variant_id, table.top_component)]
+    table.loc[:, 'effect_var'] = [model.weight_vars[study2idx.get(s), c, var2idx.get(v)] for s, v, c in zip(table.study, table.variant_id, table.top_component)]
     return table
 
 
