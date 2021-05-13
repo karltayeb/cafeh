@@ -1,8 +1,42 @@
 # CAFEH: Colocalization and Finemapping in the presence of Allelic Heterogeniety
 
-code for fitting, evaluating and plotting results of CAFEH model
+This repository contains code for fitting and plotting results of CAFEH model.
 
-To run CAFEH Summary
+Please refer to `notebooks/CAFEH_demo.ipynb` for an example of how to use CAFEH
+
+### Install
+
+To install CAFEH, clone the repository and install via pip
+
+```
+git clone https://github.com/karltayeb/cafeh.git
+cd cafeh
+pip install .
+```
+
+### 
+
+`cafeh/cafeh_summary.py`: code for class `CAFEHSummary` for fitting CAFEH with summary stats
+`cafeh/cafeh_genotype.py`: code for class `CAFEHGenotype` for fitting CAFEH with individual level data
+
+`cafeh/cafeh_model_queries.py`: methods for querying `CAFEHSummary` and `CAFEHGenotype` objects
+`cafeh/plotting.py`: some useful plots for CAFEH
+
+
+### How to use
+
+```
+from cafeh.cafeh_genotype import CAFEHGenotype
+from cafeh.fitting import weight_ard_active_fit_procedure
+
+cafehg = CAFEHGenotype(X, y, K=10, p0k=0.1)
+weight_ard_active_fit_procedure(cafehg, verbose=False)
+```
+
+For more information please refer to `notebooks/CAFEH_demo.ipynb`
+
+
+### CAFEHSummary
 ```
 from cafeh.cafeh_ss import CAFEH
 from cafeh.fitting import weight_ard_active_fit_procedure
