@@ -1,6 +1,6 @@
 # CAFEH: Colocalization and Finemapping in the presence of Allelic Heterogeniety
 
-This repository contains code for fitting and plotting results of CAFEH model. CAFEH is a method that performs finemapping and colocalization jointly over multiple phenotypes. It can support
+This repository contains code for fitting and plotting results of CAFEH model. CAFEH is a method that performs finemapping and colocalization jointly over multiple phenotypes. CAFEH can be run with 10s of phenotypes and 1000s of variants in a few minutes.
 
 Please refer to `notebooks/CAFEH_demo.ipynb` for an example of how to use CAFEH
 
