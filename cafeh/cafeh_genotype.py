@@ -1,6 +1,7 @@
 import numpy as np
 from scipy.stats import norm
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl, normal_entropy, gamma_kl
+from .fitting import weight_ard_active_fit_procedure
 import os, sys, pickle
 from scipy.special import digamma
 from .utils import np_cache_class, gamma_logpdf
@@ -578,3 +579,17 @@ class CAFEHGenotype:
             self.__dict__['X'] = X
             self.__dict__['Y'] = Y
             self.__dict__['covariates'] = cov
+
+
+def fit_cafeh_genotype(X, y, K=10, init_args={}, fit_args = {}):
+    """
+    Fit CAFEH using individual level genotype data
+    LD: LD matrix
+    X: [p, n] matrix of genotypes
+    y: [t, n] matrix of observtions
+    n: int or [t] number of samples in each phenotype,
+        if not provided a large sample approximation is made
+    """
+    cafehg = CAFEHGenotype(X, y, K=K, **init_args)
+    weight_ard_active_fit_procedure(cafehg, **fit_args)
+    return cafehg
