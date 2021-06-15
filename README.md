@@ -65,7 +65,9 @@ After you run the script there will be two files saved to the output directory
 
 `
 output
+
 ├── cafeh.{mode}.model
+
 └── cafeh.{mode}.results
 `
 
