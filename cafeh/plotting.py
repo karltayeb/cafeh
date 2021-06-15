@@ -113,7 +113,6 @@ def plot_credible_sets_ld(self, snps=None, alpha=0.9, thresh=0.5, save_path=None
         plt.show()
     plt.close()
     
-
 def plot_credible_sets_r2(self, snps=None, alpha=0.9, thresh=0.5, save_path=None, show=True):
     if snps is None:
         snps = []
