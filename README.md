@@ -63,13 +63,11 @@ python cafeh.py -h
 
 After you run the script there will be two files saved to the output directory
 
-`
+```
 output
-
 ├── cafeh.{mode}.model
-
 └── cafeh.{mode}.results
-`
+```
 
 The `.model` file is a pickle of the CAFEH model. You can load this pickle and interact with the CAFEH model in python. To generate this file you must include the `--save-model` flag.
 
