@@ -4,7 +4,7 @@ This repository contains code for fitting and plotting results of CAFEH model. C
 
 Please refer to `notebooks/CAFEH_demo.ipynb` for an example of how to use CAFEH
 
-### Install
+## Install
 
 ```
 git clone https://github.com/karltayeb/cafeh.git
@@ -14,11 +14,13 @@ conda activate cafeh  # activate environment
 pip install .  # install package in cafeh environment
 ```
 
-### How to use
+## How to use
+
+You can use CAFEH as a command line tool or a python package. Read below for a minimum example of how to use CAFEH from the command line. Look at `notebooks/CAFEH_demo.ipynb` for an example of how to interact with CAFEH in Python.
 
 ### Command line:
 
-CAFEH can be run from your terminal. To run CAFEH you will need to have your data (genotypes + phenotypes + optional covariates) OR (LD + betas and standard errors) OR (LD + zscores and sample sizes) in tab delimited files. See `example` directory for more details.
+To use CAFEH from the command line your input data will need to be formatted as a tab delimited text file. If you are using individual level data you will need to provide genotypes, phenotypes, and additional covariates. If you are running CAFEH with summary stats you will need to provide a reference LD matrix AND (effect sizes + standard errors OR z scores) AND sample sizes. For examples of how this input should be formatted look in the `example` subdirectory
 
 To run CAFEH genotype, include `--mode genotype` in the arguments. You must specify `--genotype (-X)`, `--phenotype (-Y)`, if there are other covariates you may include them with `--covariates (-c)`
 
@@ -60,6 +62,7 @@ For a full list of options run
 python cafeh.py -h
 ```
 
+### CAFEH output:
 
 After you run the script there will be two files saved to the output directory
 
