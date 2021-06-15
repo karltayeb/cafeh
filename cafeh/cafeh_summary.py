@@ -14,10 +14,35 @@ class CAFEHSummary:
     from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
     from .model_queries import get_credible_sets, get_purity, get_pip, get_study_pip, get_expected_weights, check_convergence
 
-    def __init__(self, LD, B, S, K, p0k=0.1, prior_variance=0.1, snp_ids=None, study_ids=None, tolerance=1e-5):
+    def __init__(self, LD, B, S, K, p0k=0.1, prior_variance=0.1, prior_pi=None, snp_ids=None, study_ids=None, tolerance=1e-5):
         """
-        blah
+        Initialize CAFEHSummary with data and model (hyper) parameters
+        LD [N x N] LD matrix, pairwise correlation of SNPs across sample or
+            reference panel
+        B [T x N] marginal effect size estimates for each SNP in each phenotype
+        S [T x N] standard errors of effect size estimates
+
+        p0k: float or [K]
+            prior probability that each component is active in each study
+        prior_variance: [T, K]
+            prior variance for weight of (study, component) loading
+        prior_pi: prior for multinomial,
+            probability of sampling a snps as the active feature
+        snp_ids: [N]
+            vector of SNP ids
+        study_ids: [T]
+            vector of study names
+        tolerance:
+            level at which to declare convergence of optimization objective
         """
+        if type(LD) is pd.DataFrame:
+            snp_ids = LD.index.values
+            LD = LD.values
+        if type(B) is pd.DataFrame:
+            study_ids = B.index.values
+            B = B.values
+        if type(S) is pd.DataFrame:
+            S = S.values
 
         # set data
         self.LD = LD  # N x N
@@ -30,8 +55,7 @@ class CAFEHSummary:
         self.study_ids = study_ids if (study_ids is not None) else np.arange(T)
         self.snp_ids = snp_ids if (snp_ids is not None) else np.arange(N)
 
-        self.prior_precision = np.ones((T, K))
-        self.prior_pi = np.ones(N) / N
+        self.prior_pi = prior_pi  if (prior_pi is not None) else np.ones(N) / N
         self.prior_activity = np.ones(K) * p0k
 
         # initialize latent vars
@@ -562,30 +586,27 @@ class CAFEHSummary:
             self.__dict__['LD'] = LD
 
         if not save_data:
-            self.__dict__['B'] = Bs
+            self.__dict__['B'] = B
         self._decompress_model()
 
 
-def fit_cafeh_summary(LD, beta, stderr, n=np.inf, K=10, init_args={}, fit_args = {}):
+def fit_cafeh_summary(LD, beta, stderr, n, K=10, init_args={}, fit_args = {}):
     """
     Fit cafeh using reference LD, effect sizes, and standard errors
     
     LD: LD matrix
     beta: [t, p] matrix of effect sizes
     stderr: [t, p] matrix of standard error
-    n: int or [t] number of samples in each phenotype,
+    n: int or [t, p] number of samples in each phenotype,
         if not provided a large sample approximation is made
     """
-    if not (type(n) == np.ndarray):
-        n = np.ones(beta.shape[0]) * n
-    S = np.sqrt(beta**2/n[:, None] + stderr**2)
-    
+    S = np.sqrt(beta**2/n + stderr**2)
     cafehs = CAFEHSummary(LD, beta, S, K=K, **init_args)
     weight_ard_active_fit_procedure(cafehs, **fit_args)
     return cafehs
 
 
-def fit_cafeh_z(LD, z, n=np.inf, K=10, init_args={}, fit_args={}):
+def fit_cafeh_z(LD, z, n, K=10, init_args={}, fit_args={}):
     """
     Fit CAFEH using reference LD and zscores
     LD: LD matrix
@@ -593,7 +614,8 @@ def fit_cafeh_z(LD, z, n=np.inf, K=10, init_args={}, fit_args={}):
     n: [t] number of samples in each phenotype,
         if not provided a large sample approximation is made
     """
-    Z =  z / np.sqrt((z**2 + n[:, None]) / n[:, None])
+    
+    Z =  z / np.sqrt((z**2 + n) / n)
     cafehz = CAFEHSummary(LD, Z, np.ones_like(z), K=K, **init_args)
     weight_ard_active_fit_procedure(cafehz, max_iter=100)
     return cafehz

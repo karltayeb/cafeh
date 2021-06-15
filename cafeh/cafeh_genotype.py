@@ -1,11 +1,11 @@
 import numpy as np
+import pandas as pd
 from scipy.stats import norm
 from .kls import unit_normal_kl, normal_kl, categorical_kl, bernoulli_kl, normal_entropy, gamma_kl
 from .fitting import weight_ard_active_fit_procedure
 import os, sys, pickle
 from scipy.special import digamma
 from .utils import np_cache_class, gamma_logpdf
-from functools import lru_cache
 import time
 
 
@@ -15,16 +15,40 @@ class CAFEHGenotype:
 
     def __init__(self, X, Y, K, p0k=0.1, prior_variance=0.1, covariates=None, prior_pi=None, snp_ids=None, study_ids=None, sample_ids=None, tolerance=1e-5):
         """
+        Initialize CAFEHGenotype with data and model (hyper) parameters
         Y [T x M] expresion for study, individual
         X [N x M] genotype for snp, individual
             potentially [T x N x M] if study specific correction
-        prior_weight_variance [T, K]
+
+        p0k: float or [K]
+            prior probability that each component is active in each study
+        prior_variance: [T, K]
             prior variance for weight of (study, component) loading
-        prior_activity [K]
-            prior probability of sapling from slab in component k
+        covariates: pd.DataFrame
+            dataframe containing covariates. must have a multi-index where the
+            first index matches `study_id` and the second index names the
+            covariates
         prior_pi: prior for multinomial,
             probability of sampling a snps as the active feature
+        snp_ids: [N]
+            vector of SNP ids
+        study_ids: [T]
+            vector of study names
+        sample_ids: [M]
+            vector of sample names
+        tolerance:
+            level at which to declare convergence of optimization objective
         """
+
+        # if we are passed dataframes for X and Y, use indices and column names
+        if type(X) is pd.DataFrame:
+            snp_ids = X.index.values
+            sample_ids = X.columns.values
+            X = X.values
+
+        if type(Y) is pd.DataFrame:
+            study_ids = Y.index.values
+            Y = Y.values
 
         # set data
         self.X = X
@@ -460,7 +484,7 @@ class CAFEHGenotype:
 
     def compute_elbo(self, residual=None):
         """
-        copute evidence lower bound
+        compute evidence lower bound
         """
         expected_conditional = 0
         KL = 0
@@ -581,7 +605,7 @@ class CAFEHGenotype:
             self.__dict__['covariates'] = cov
 
 
-def fit_cafeh_genotype(X, y, K=10, init_args={}, fit_args = {}):
+def fit_cafeh_genotype(X, y, covariates=None, K=10, init_args={}, fit_args = {}):
     """
     Fit CAFEH using individual level genotype data
     LD: LD matrix
@@ -590,6 +614,6 @@ def fit_cafeh_genotype(X, y, K=10, init_args={}, fit_args = {}):
     n: int or [t] number of samples in each phenotype,
         if not provided a large sample approximation is made
     """
-    cafehg = CAFEHGenotype(X, y, K=K, **init_args)
+    cafehg = CAFEHGenotype(X, y, covariates = covariates, K=K, **init_args)
     weight_ard_active_fit_procedure(cafehg, **fit_args)
     return cafehg

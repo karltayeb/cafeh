@@ -19,7 +19,12 @@ def check_convergence(self):
 
 def get_expected_weights(self):
     """
-    return 
+    \mathbb E[w_tk] = \sum_i \pi_{ki} \gamma_{tk} \mathbb E [w_{tki}]
+
+    compute the expected effect size for each component in each phenotype,
+    averaged over SNPs
+
+    returns weights, a [T, K] matrix of expected effect sizes
     """
     if self.weight_means.ndim == 2:
         weights = self.weight_means * self.active
@@ -122,7 +127,7 @@ def get_minalpha(model):
         index=model.snp_ids
     )
 
-def summary_table(model, filter_variants=True, max_snps=500, min_p_active=0.5):
+def summary_table(model, filter_variants=False, max_snps=500, min_p_active=0.5):
     """
     map each variant to its top component
 
@@ -138,7 +143,7 @@ def summary_table(model, filter_variants=True, max_snps=500, min_p_active=0.5):
         effect: the posterior mean of w_{study, top_component} conditioned on top_component selecting the snp
         effect_var: posterior variance of w_{study, top_component} conditioned on top_component selecting the snp
 
-    if filter_variants is True the returned table to filtered to only max_snps,
+    if filter_variants is True the returned table to filtered to only max_snps with the highest posterior inclusion probability,
     and only report study, component pairs with p_active > min_p_active
     """
 
