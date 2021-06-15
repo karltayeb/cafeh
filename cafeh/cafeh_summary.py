@@ -11,7 +11,7 @@ class CAFEHSummary:
     """
     CAFEH RSS estimate of CAFEH-G with spike and slab weights
     """
-    from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
+    from .plotting import plot_components
     from .model_queries import get_credible_sets, get_purity, get_pip, get_study_pip, get_expected_weights, check_convergence
 
     def __init__(self, LD, B, S, K, p0k=0.1, prior_variance=0.1, prior_pi=None, snp_ids=None, study_ids=None, tolerance=1e-5):
@@ -614,7 +614,7 @@ def fit_cafeh_z(LD, z, n, K=10, init_args={}, fit_args={}):
     n: [t] number of samples in each phenotype,
         if not provided a large sample approximation is made
     """
-    
+
     Z =  z / np.sqrt((z**2 + n) / n)
     cafehz = CAFEHSummary(LD, Z, np.ones_like(z), K=K, **init_args)
     weight_ard_active_fit_procedure(cafehz, max_iter=100)

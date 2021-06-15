@@ -10,7 +10,7 @@ import time
 
 
 class CAFEHGenotype:
-    from .plotting import plot_components, plot_assignment_kl, plot_credible_sets_ld, plot_decomposed_zscores, plot_pips
+    from .plotting import plot_components
     from .model_queries import get_credible_sets, get_purity, get_pip, get_study_pip, get_expected_weights, check_convergence
 
     def __init__(self, X, Y, K, p0k=0.1, prior_variance=0.1, covariates=None, prior_pi=None, snp_ids=None, study_ids=None, sample_ids=None, tolerance=1e-5):
