@@ -1,11 +1,9 @@
 from cafeh.cafeh_genotype import CAFEHGenotype, fit_cafeh_genotype
 from cafeh.cafeh_summary import CAFEHSummary, fit_cafeh_summary, fit_cafeh_z
-from cafeh.misc import plot_components
 from cafeh.fitting import weight_ard_active_fit_procedure
 from cafeh.model_queries import *
 import argparse
 import os
-
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Finemap and colocalize multiple studies with CAFEH')
