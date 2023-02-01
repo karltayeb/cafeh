@@ -617,5 +617,5 @@ def fit_cafeh_z(LD, z, n, K=10, init_args={}, fit_args={}):
 
     Z =  z / np.sqrt((z**2 + n) / n)
     cafehz = CAFEHSummary(LD, Z, np.ones_like(z), K=K, **init_args)
-    weight_ard_active_fit_procedure(cafehz, max_iter=100)
+    weight_ard_active_fit_procedure(cafehz, **fit_args)
     return cafehz

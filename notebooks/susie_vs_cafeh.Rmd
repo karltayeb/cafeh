@@ -1,0 +1,111 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+TLDR
+
+CAFEH and SuSiE are equivalent when CAFEH is fit with one study and neither method 
+estimates the prior effect size variance.
+
+Differences arise due to different methods of estimating effect size variance.
+
+```{r}
+library(reticulate)
+reticulate::use_condaenv('/usr/local/Caskroom/miniconda/base/envs/cafeh')
+py_config()
+```
+
+```{python}
+import numpy as np
+import pandas as pd
+import scipy as sp
+
+from cafeh.cafeh_genotype import fit_cafeh_genotype
+#from cafeh.plotting import plot_components
+```
+
+```{r}
+library(tidyverse)
+library(susieR)
+
+X <- read.table('github_issue1/CAFEH_toydata/Genotype_ENSG00000002933_perm0.tsv', header=TRUE)
+rownames(X) <- X[, 1]
+X <- X[, -1]
+
+y <- read.table('github_issue1/CAFEH_toydata/Expression_ENSG00000002933_perm0.tsv', header=TRUE)
+rownames(y) <- y[, 1]
+y <- y[, -1]
+
+XX <- t(as.matrix(X))
+yy <- as.vector(y[1,])
+
+fit <- susie(X=XX, y=unlist(y[1,]), L=10)
+
+y <- as_tibble(y)
+yt <- as_tibble(t(y))
+
+susie_fits <- yt %>%
+  map(~susie(X=XX, y=.x))
+susie_pips <- map_dfr(susie_fits, ~susie_get_pip(.x))
+colnames(susie_pips) <- colnames(cafeh_pips)
+```
+
+```{r}
+cafeh_pips <- read.table('github_issue1/cafeh_pips_ard', sep=',', header=TRUE)[, -1]
+cafeh_pips <- as_tibble(cafeh_pips)
+plot(susie_pips$DC_ACTIVE, cafeh_pips$DC_ACTIVE)
+```
+
+```{r}
+susie_fits_priorEM <- yt %>%
+  map(~susie(X=XX, y=.x, estimate_prior_method='EM'))
+susie_pips_priorEM <- map_dfr(susie_fits_priorEM, ~susie_get_pip(.x))
+colnames(susie_pips_priorEM) <- colnames(cafeh_pips)
+plot(susie_pips_priorEM$DC_ACTIVE, cafeh_pips$DC_ACTIVE)
+```
+
+```{r}
+susie_fits_priorsimple<- yt %>%
+  map(~susie(X=XX, y=.x, estimate_prior_method='simple'))
+susie_pips_priorsimple <- map_dfr(susie_fits_priorsimple, ~susie_get_pip(.x))
+colnames(susie_pips_priorsimple) <- colnames(cafeh_pips)
+plot(susie_pips_priorsimple$DC_ACTIVE, cafeh_pips$DC_ACTIVE)
+```
+
+```{r}
+susie_fits_prioroptim<- yt %>%
+  map(~susie(X=XX, y=.x, estimate_prior_method='optim'))
+susie_pips_prioroptim <- map_dfr(susie_fits_prioroptim, ~susie_get_pip(.x))
+colnames(susie_pips_prioroptim) <- colnames(cafeh_pips)
+plot(susie_pips_prioroptim$DC_ACTIVE, cafeh_pips$DC_ACTIVE)
+```
+
+
+```{r}
+susie_fits_priorsimple<- yt %>%
+  map(~susie(X=XX, y=.x, estimate_prior_method='simple'))
+susie_pips_priorsimple <- map_dfr(susie_fits_priorsimple, ~susie_get_pip(.x))
+colnames(susie_pips_priorsimple) <- colnames(cafeh_pips)
+plot(susie_pips_priorsimple$Bcells_ACTIVE, cafeh_pips$Bcells_ACTIVE)
+```
+
+```{r}
+susie_fits_no_ard <- yt %>%
+  map(~susie(X=XX, y=.x, estimate_prior_variance=FALSE))
+susie_pips_no_ard <- map_dfr(susie_fits_no_ard, ~susie_get_pip(.x))
+colnames(susie_pips_no_ard) <- colnames(cafeh_pips)
+```
+
+```{r}
+cafeh_pips_no_ard <- read.table('github_issue1/cafeh_pips3', sep=',', header=TRUE)[, -1]
+cafeh_pips_no_ard <- as_tibble(cafeh_pips_no_ard)
+plot(susie_pips_no_ard$Bcells_ACTIVE, cafeh_pips_no_ard$Bcells_ACTIVE)
+```
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Cmd+Option+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Cmd+Shift+K* to preview the HTML file). 
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
+
